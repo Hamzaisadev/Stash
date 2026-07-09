@@ -1,0 +1,29 @@
+# 1. Node.js Dependency folders
+node_modules/
+
+# 2. SQLite Database Files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# 3. User Upload Storage
+backend/uploads/
+
+# 4. Environment configuration files (Credentials)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 5. Frontend Build production folders
+frontend/dist/
+
+# 6. System files and logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+.DS_Store
+Thumbs.db
