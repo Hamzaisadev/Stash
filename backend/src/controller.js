@@ -108,7 +108,7 @@ export const uploadFile = async (req, res, next) => {
 
 //get file controller 
 
-export const getFilees = async (req, res, next) => {
+export const getFiles = async (req, res, next) => {
     try {
         const { room_id } = req.params;
 
@@ -178,8 +178,7 @@ export const downloadFile = async (req, res, next) => {
 
         await dbRun(`UPDATE files SET download_count = ? WHERE id = ?`, [newDownloadCount, file.id])
 
-        res.setHeader('Content-Disposition', `attachment;
-            filename= "${encodeURIComponent(file.filename)}"`
+        res.setHeader('Content-Disposition', `attachment; filename= "${encodeURIComponent(file.filename)}"`
         )
         res.setHeader('Content-type', file.mime_type);
         res.setHeader('Content-length', file.file_size);
@@ -210,3 +209,16 @@ export const downloadFile = async (req, res, next) => {
     }
 
 }
+
+export const getRoom = async (req, res, next) => {
+    try {
+        const clientIP = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
+        const room_id = hashIp(clientIP);
+        res.status(200).json({
+            status: 'success',
+            data: { room_id }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
