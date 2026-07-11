@@ -7,7 +7,7 @@ import { globalErrorHandler } from "./utils/errors.js";
 import { generateRoomToken } from "./utils/auth.js";
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Create the raw HTTP server to wrap our Express app
 const server = http.createServer(app);

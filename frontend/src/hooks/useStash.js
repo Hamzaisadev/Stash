@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 const serverIP = window.location.hostname;
-const API_BASE = `http://${serverIP}:5000/api`;
-const SOCKET_BASE = `http://${serverIP}:5000`;
+const PROD_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://your-backend.onrender.com';
+const API_BASE = import.meta.env.PROD ? `${PROD_BACKEND_URL}/api` : `http://${serverIP}:5000/api`;
+const SOCKET_BASE = import.meta.env.PROD ? PROD_BACKEND_URL : `http://${serverIP}:5000`;
 
 const generateClientId = () => {
     let id = localStorage.getItem('stash_client_id');
