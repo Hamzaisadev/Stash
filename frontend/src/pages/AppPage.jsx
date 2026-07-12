@@ -21,7 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
@@ -40,7 +40,8 @@ import {
   Info,
   RotateCw,
   LogOut,
-  X
+  X,
+  Menu
 } from "lucide-react";
 
 function AppPage() {
@@ -270,7 +271,7 @@ function AppPage() {
         />
         
         <div className="flex-grow flex flex-col relative h-full overflow-y-auto">
-          {gate && gate.isGate ? (
+          {gate ? (
             <GateScreen 
               gate={gate} 
               joinRoomWithKey={joinRoomWithKey} 
@@ -283,26 +284,30 @@ function AppPage() {
 
                 {/* Notion-style Page Header */}
                 <header className="flex items-center justify-between border-b border-slate-900 pb-4 mb-6 text-left animate-fadeIn">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <h1 className="text-2xl font-bold text-white tracking-tight">{room.name || 'stash:default'}</h1>
-                      {room.id && room.id !== 'undefined' && (
-                        <button
-                          onClick={() => {
-                            setEditName(room.name || '');
-                            setEditDescription(room.description || '');
-                            setShowEditModal(true);
-                          }}
-                          className="text-slate-500 hover:text-slate-200 transition-colors p-1"
-                          title="Edit Room Info"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
+                  <div className="flex items-center gap-2">
+                    {/* Mobile hamburger — only visible on small screens */}
+                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-200 hover:bg-slate-900/60 rounded-lg p-1.5 cursor-pointer" />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold text-white tracking-tight">{room.name || 'stash:default'}</h1>
+                        {room.id && room.id !== 'undefined' && (
+                          <button
+                            onClick={() => {
+                              setEditName(room.name || '');
+                              setEditDescription(room.description || '');
+                              setShowEditModal(true);
+                            }}
+                            className="text-slate-500 hover:text-slate-200 transition-colors p-1"
+                            title="Edit Room Info"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {room.description && (
+                        <p className="text-xs text-slate-500 mt-1">{room.description}</p>
                       )}
                     </div>
-                    {room.description && (
-                      <p className="text-xs text-slate-500 mt-1">{room.description}</p>
-                    )}
                   </div>
 
                   <div className="flex items-center space-x-3 bg-slate-950/60 border border-slate-900 rounded-xl px-3 py-1.5 shadow-sm">

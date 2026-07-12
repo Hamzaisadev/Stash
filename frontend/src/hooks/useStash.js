@@ -151,17 +151,25 @@ export function useStash() {
             });
         });
 
-        // Room settings updated
+        // Room settings updated by host — only overwrite fields that are present in the broadcast
         socket.on("room-updated", (updates) => {
             setRoom(prev => {
                 if (prev.id !== updates.id) return prev;
-                return { ...prev, ...updates };
+                // stack_key is only broadcast to the host directly via HTTP response.
+                // Don't clobber it from socket broadcast (which omits it for security)
+                const merged = { ...prev, ...updates };
+                if (!('stack_key' in updates)) {
+                    merged.stack_key = prev.stack_key;
+                }
+                return merged;
             });
         });
 
-        // Join requests (for creators)
+        // Join requests (for creators) — only process if we are the host
         socket.on("join-request", (requestData) => {
-            // In a full app, we'd add this to a queue state. For now, dispatch event or handle via simple alert
+            // hostClientId is the registered host's clientId. Only the matching client should show the modal.
+            const myClientId = generateClientId();
+            if (requestData.hostClientId && requestData.hostClientId !== myClientId) return;
             window.dispatchEvent(new CustomEvent('stash-join-request', { detail: requestData }));
             fireNotification("Access Request", `${requestData.guestName} wants to join your room.`);
         });
@@ -334,7 +342,8 @@ export function useStash() {
             Object.values(screenSharePCs.current).forEach(pc => pc.close());
             if (receiverScreenPC.current) receiverScreenPC.current.close();
         };
-    }, [room.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Socket created once — room joining is handled separately via join-room emit
 
     // 4. Room resolution & Management
     const fetchDefaultRoom = async () => {
@@ -504,9 +513,9 @@ export function useStash() {
         }
     };
 
-    const requestAccessAcceptOnly = (roomId, username) => {
+    const requestAccessAcceptOnly = (roomId, guestName) => {
         if (socketRef.current) {
-            socketRef.current.emit("join-request", { roomId, username, clientId });
+            socketRef.current.emit("join-request", { roomId, guestName, clientId });
         }
     };
 
@@ -518,7 +527,7 @@ export function useStash() {
 
     const denyGuest = (roomId, guestSocketId) => {
         if (socketRef.current) {
-            socketRef.current.emit("join-deny", { roomId, guestSocketId });
+            socketRef.current.emit("join-deny", { roomId, guestSocketId, hostId: clientId });
         }
     };
 
@@ -531,7 +540,18 @@ export function useStash() {
             });
             const json = await res.json();
             if (json.status === 'success') {
-                setRoom(prev => ({ ...prev, ...settingsData }));
+                const updatedRoom = json.data.room;
+                // Merge full server response so generated stack_key, expires_at etc. are reflected
+                setRoom(prev => ({
+                    ...prev,
+                    name: updatedRoom.name,
+                    description: updatedRoom.description,
+                    is_protected: updatedRoom.is_protected,
+                    accept_only: updatedRoom.accept_only,
+                    stack_key: updatedRoom.stack_key,
+                    stack_key_expires_at: updatedRoom.stack_key_expires_at,
+                    creator_socket_id: updatedRoom.creator_socket_id
+                }));
                 return { success: true };
             }
             throw new Error(json.message);
@@ -621,10 +641,19 @@ export function useStash() {
     useEffect(() => {
         if (!room.id) return;
         fetchRoomFiles(room.id);
-        fetchRoomDetails(room.id);
-        if (socketRef.current) {
-            socketRef.current.emit("join-room", room.id);
-        }
+        // fetchRoomDetails is called here to get latest room info including stack_key
+        // We use a local closure ref to get the latest room.creator_socket_id after it resolves
+        fetchRoomDetails(room.id).then((res) => {
+            if (res && res.room && socketRef.current) {
+                const isHost = res.room.creator_socket_id === generateClientId() ||
+                               res.room.creator_socket_id === 'system';
+                socketRef.current.emit("join-room", {
+                    roomId: room.id,
+                    clientId: generateClientId(),
+                    isHost
+                });
+            }
+        });
     }, [room.id]);
 
     // 5. File Upload (with folder support)

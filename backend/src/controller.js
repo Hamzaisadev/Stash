@@ -876,6 +876,7 @@ export const updateRoomSettings = async (req, res, next) => {
             is_protected: updatedRoom.is_protected,
             accept_only: updatedRoom.accept_only,
             has_stack_key: !!updatedRoom.stack_key,
+            stack_key: updatedRoom.stack_key,
             stack_key_expires_at: updatedRoom.stack_key_expires_at
         });
 

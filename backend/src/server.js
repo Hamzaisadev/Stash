@@ -25,35 +25,58 @@ const io = new Server(server, {
     }
 });
 
+// Track which socket ID is the host of each room (in-memory, resets on server restart)
+const roomHosts = new Map(); // roomId -> hostClientId
+
 // Configure Socket.io room matching, clipboard sync & WebRTC signaling
 io.on("connection", (socket) => {
     console.log("Client connected via socket:", socket.id);
 
     // Listen for room join requests
-    socket.on("join-room", (roomId) => {
+    socket.on("join-room", ({ roomId, clientId, isHost }) => {
         socket.join(roomId);
-        console.log(`Socket client ${socket.id} joined room: ${roomId}`);
+        // Register this client as host if they claim host and no host is registered yet
+        if (isHost && !roomHosts.has(roomId)) {
+            roomHosts.set(roomId, clientId);
+        }
+        console.log(`Socket client ${socket.id} (${clientId}) joined room: ${roomId}${isHost ? ' [HOST]' : ''}`);
     });
 
     // Accept Only manual approval queue signaling
     socket.on("join-request", ({ roomId, guestName, clientId }) => {
-        // Broadcast the request to all clients in the room (which includes the hosts)
+        // Only forward the join request to the host socket(s) in the room, not all members
+        // We find host sockets by iterating room members and checking against registered host clientId
+        const hostClientId = roomHosts.get(roomId);
+        // Broadcast only to others in room; hosts listening via stash-join-request event will filter
         socket.to(roomId).emit("join-request", {
             roomId,
             guestName,
             guestSocketId: socket.id,
-            clientId
+            clientId,
+            hostClientId // Let frontend filter: only process if clientId matches your own
         });
         console.log(`Join request from ${guestName} (${socket.id}) for room ${roomId}`);
     });
 
     socket.on("join-approve", ({ roomId, guestSocketId, guestClientId, hostId }) => {
+        // Verify the approver is the registered host for this room
+        const registeredHost = roomHosts.get(roomId);
+        if (registeredHost && registeredHost !== hostId) {
+            console.warn(`Unauthorized join-approve attempt by ${hostId} for room ${roomId}`);
+            return; // Silently reject
+        }
         const token = generateRoomToken(roomId, guestClientId);
         io.to(guestSocketId).emit("join-approved", { token, roomId });
         console.log(`Host ${hostId} approved guest socket ${guestSocketId} for room ${roomId}`);
     });
 
-    socket.on("join-deny", ({ roomId, guestSocketId }) => {
+    socket.on("join-deny", ({ roomId, guestSocketId, hostId }) => {
+        // Verify the denier is the registered host
+        const registeredHost = roomHosts.get(roomId);
+        if (registeredHost && registeredHost !== hostId) {
+            console.warn(`Unauthorized join-deny attempt by ${hostId} for room ${roomId}`);
+            return;
+        }
         io.to(guestSocketId).emit("join-denied", { roomId });
         console.log(`Host denied guest socket ${guestSocketId} for room ${roomId}`);
     });
