@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { toast } from 'sonner';
 
 const serverIP = window.location.hostname;
 const PROD_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://your-backend.onrender.com';
@@ -136,6 +137,16 @@ export function useStash() {
 
             // Feature 4: Desktop Push Notification
             fireNotification("New file received", `${newFile.filename} was shared in your room.`);
+
+            // In-app Toast Notification with quick action to switch tabs
+            toast.info(`New file shared: ${newFile.filename}`, {
+                action: {
+                    label: "View Files",
+                    onClick: () => {
+                        window.dispatchEvent(new CustomEvent('stash-switch-to-files'));
+                    }
+                }
+            });
         });
 
         // File was deleted
@@ -196,6 +207,17 @@ export function useStash() {
         socket.on("clipboard-sync", ({ text }) => {
             setClipboard(prev => [...prev, { text, time: Date.now(), fromRemote: true }]);
             fireNotification("Clipboard received", text.substring(0, 80));
+
+            // In-app Toast Notification with quick action to switch tabs
+            toast.info("Clipboard content synced", {
+                description: text.substring(0, 50) + (text.length > 50 ? "..." : ""),
+                action: {
+                    label: "View Clipboard",
+                    onClick: () => {
+                        window.dispatchEvent(new CustomEvent('stash-switch-to-clipboard'));
+                    }
+                }
+            });
         });
 
         // Feature 2: Live Download Receipt updates
@@ -1040,7 +1062,9 @@ export function useStash() {
     // 9. Fetch preview URL for images/videos
     const fetchPreviewUrl = async (fileId) => {
         try {
-            const res = await fetch(`${API_BASE}/preview/${fileId}`);
+            const res = await fetch(`${API_BASE}/preview/${fileId}`, {
+                headers: getAuthHeaders(room.id)
+            });
             const json = await res.json();
             if (json.status === "success") {
                 return json.data.url;
@@ -1049,15 +1073,21 @@ export function useStash() {
         return null;
     };
 
+    const [shareType, setShareType] = useState(null); // 'screen', 'webcam' or null
+
     // ==========================================
     // Live Screen Share Controllers
     // ==========================================
     const startScreenShare = async () => {
         try {
+            if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach(track => track.stop());
+            }
             const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
             setScreenStream(stream);
             screenStreamRef.current = stream;
             setIsScreenSharing(true);
+            setShareType('screen');
 
             // Listen for stream ending (e.g. from browser stop sharing pill)
             stream.getVideoTracks()[0].onended = () => {
@@ -1072,6 +1102,31 @@ export function useStash() {
         }
     };
 
+    const startWebcamShare = async () => {
+        try {
+            if (screenStreamRef.current) {
+                screenStreamRef.current.getTracks().forEach(track => track.stop());
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            setScreenStream(stream);
+            screenStreamRef.current = stream;
+            setIsScreenSharing(true);
+            setShareType('webcam');
+
+            // Listen for stream ending
+            stream.getVideoTracks()[0].onended = () => {
+                stopScreenShare();
+            };
+
+            if (socketRef.current) {
+                socketRef.current.emit("screen-share-start", { roomId: room.id });
+            }
+        } catch (err) {
+            console.error("Webcam Share Capture Failed:", err);
+            toast.error("Failed to access camera or microphone.");
+        }
+    };
+
     const stopScreenShare = () => {
         if (screenStreamRef.current) {
             screenStreamRef.current.getTracks().forEach(track => track.stop());
@@ -1079,6 +1134,7 @@ export function useStash() {
             screenStreamRef.current = null;
         }
         setIsScreenSharing(false);
+        setShareType(null);
 
         // Close all peer screen share connections
         Object.values(screenSharePCs.current).forEach(pc => pc.close());
@@ -1099,7 +1155,8 @@ export function useStash() {
         screenShare: {
             isSharing: isScreenSharing,
             stream: screenStream,
-            remoteStream: remoteScreenStream
+            remoteStream: remoteScreenStream,
+            shareType
         },
         clientId,
         myRooms,
@@ -1135,6 +1192,7 @@ export function useStash() {
         clearClipboard,
         fetchPreviewUrl,
         startScreenShare,
+        startWebcamShare,
         stopScreenShare
     };
 }

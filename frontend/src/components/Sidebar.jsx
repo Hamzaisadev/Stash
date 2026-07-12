@@ -9,7 +9,8 @@ import {
   SidebarMenu, 
   SidebarMenuItem, 
   SidebarMenuButton,
-  SidebarFooter
+  SidebarFooter,
+  useSidebar
 } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,8 +43,16 @@ export default function Sidebar({
     clipboardCount,
     onOpenShareForRoom
 }) {
+    const { isMobile, setOpenMobile } = useSidebar();
     const [isCreating, setIsCreating] = useState(false);
     const [newRoomName, setNewRoomName] = useState('');
+
+    const handleNavigation = (action) => {
+        action();
+        if (isMobile) {
+            setOpenMobile(false);
+        }
+    };
 
     const handleCreate = async (e) => {
         e.preventDefault();
@@ -52,6 +61,7 @@ export default function Sidebar({
         if (res.success) {
             setIsCreating(false);
             setNewRoomName('');
+            if (isMobile) setOpenMobile(false);
         } else {
             alert(res.error || 'Failed to create room');
         }
@@ -62,7 +72,7 @@ export default function Sidebar({
             <SidebarHeader className="p-4 border-b border-slate-900/50">
                 <div 
                     className="flex items-center gap-2.5 text-white font-bold text-base cursor-pointer hover:opacity-90 transition-opacity" 
-                    onClick={() => fetchDefaultRoom()}
+                    onClick={() => handleNavigation(fetchDefaultRoom)}
                 >
                     <FolderHeart className="w-5.5 h-5.5 text-indigo-500 fill-indigo-500/20" />
                     <span className="tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">Stash</span>
@@ -81,12 +91,11 @@ export default function Sidebar({
                             {[
                                 { id: 'files', label: 'Files', count: roomFileCount, icon: <FileText className="w-4 h-4" /> },
                                 { id: 'clipboard', label: 'Clipboard', count: clipboardCount, icon: <ClipboardList className="w-4 h-4" /> },
-                                { id: 'voice', label: 'Voice Notes', count: null, icon: <Mic className="w-4 h-4" /> },
                                 { id: 'screen', label: 'Screen Share', count: null, icon: <MonitorPlay className="w-4 h-4" /> }
                             ].map(item => (
                                 <SidebarMenuItem key={item.id}>
                                     <SidebarMenuButton
-                                        onClick={() => onChangeMode(item.id)}
+                                        onClick={() => handleNavigation(() => onChangeMode(item.id))}
                                         isActive={activeMode === item.id}
                                         className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer ${
                                             activeMode === item.id 
@@ -149,7 +158,7 @@ export default function Sidebar({
                             {myRooms.map(r => (
                                 <SidebarMenuItem key={r.id} className="group/item relative flex items-center justify-between rounded-xl hover:bg-slate-900/40 transition-all">
                                     <SidebarMenuButton
-                                        onClick={() => setRoomId(r.id)}
+                                        onClick={() => handleNavigation(() => setRoomId(r.id))}
                                         isActive={currentRoomId === r.id}
                                         className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
                                             currentRoomId === r.id ? 'bg-slate-900 text-white font-medium rounded-xl' : 'text-slate-400 hover:text-slate-200'
@@ -200,7 +209,7 @@ export default function Sidebar({
                                 {joinedRooms.map(r => (
                                     <SidebarMenuItem key={r.id} className="group/item relative flex items-center justify-between rounded-xl hover:bg-slate-900/40 transition-all">
                                         <SidebarMenuButton
-                                            onClick={() => setRoomId(r.id)}
+                                            onClick={() => handleNavigation(() => setRoomId(r.id))}
                                             isActive={currentRoomId === r.id}
                                             className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
                                                 currentRoomId === r.id ? 'bg-slate-900 text-white font-medium rounded-xl' : 'text-slate-400 hover:text-slate-200'

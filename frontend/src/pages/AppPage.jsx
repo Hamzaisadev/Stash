@@ -75,6 +75,7 @@ function AppPage() {
     clearClipboard,
     fetchPreviewUrl,
     startScreenShare,
+    startWebcamShare,
     stopScreenShare
   } = useStash();
 
@@ -119,6 +120,23 @@ function AppPage() {
     window.addEventListener('stash-join-request', handleRequest);
     return () => window.removeEventListener('stash-join-request', handleRequest);
   }, [room.id]);
+
+  // Listen for custom events to switch active mode tabs
+  useEffect(() => {
+    const switchToFiles = () => setActiveMode('files');
+    const switchToClipboard = () => setActiveMode('clipboard');
+    const switchToScreen = () => setActiveMode('screen');
+
+    window.addEventListener('stash-switch-to-files', switchToFiles);
+    window.addEventListener('stash-switch-to-clipboard', switchToClipboard);
+    window.addEventListener('stash-switch-to-screen', switchToScreen);
+
+    return () => {
+      window.removeEventListener('stash-switch-to-files', switchToFiles);
+      window.removeEventListener('stash-switch-to-clipboard', switchToClipboard);
+      window.removeEventListener('stash-switch-to-screen', switchToScreen);
+    };
+  }, []);
 
   // URL Interception for QR code scans
   useEffect(() => {
@@ -283,13 +301,13 @@ function AppPage() {
               <div className="max-w-2xl mx-auto space-y-6">
 
                 {/* Notion-style Page Header */}
-                <header className="flex items-center justify-between border-b border-slate-900 pb-4 mb-6 text-left animate-fadeIn">
-                  <div className="flex items-center gap-2">
+                <header className="flex items-center justify-between border-b border-slate-900 pb-3 mb-4 sm:pb-4 sm:mb-6 text-left animate-fadeIn">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                     {/* Mobile hamburger — only visible on small screens */}
-                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-200 hover:bg-slate-900/60 rounded-lg p-1.5 cursor-pointer" />
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold text-white tracking-tight">{room.name || 'stash:default'}</h1>
+                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-200 hover:bg-slate-900/60 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight truncate max-w-[120px] sm:max-w-none">{room.name || 'stash:default'}</h1>
                         {room.id && room.id !== 'undefined' && (
                           <button
                             onClick={() => {
@@ -297,44 +315,44 @@ function AppPage() {
                               setEditDescription(room.description || '');
                               setShowEditModal(true);
                             }}
-                            className="text-slate-500 hover:text-slate-200 transition-colors p-1"
+                            className="text-slate-500 hover:text-slate-200 transition-colors p-0.5 sm:p-1 shrink-0"
                             title="Edit Room Info"
                           >
-                            <Pencil className="w-3.5 h-3.5" />
+                            <Pencil className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
                           </button>
                         )}
                       </div>
                       {room.description && (
-                        <p className="text-xs text-slate-500 mt-1">{room.description}</p>
+                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate max-w-[140px] sm:max-w-none">{room.description}</p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3 bg-slate-950/60 border border-slate-900 rounded-xl px-3 py-1.5 shadow-sm">
+                  <div className="flex items-center space-x-1.5 sm:space-x-3 bg-slate-950/60 border border-slate-900 rounded-lg sm:rounded-xl px-2 py-1 sm:px-3 sm:py-1.5 shadow-sm shrink-0">
                     <button
                       onClick={() => setShowShareModal(true)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                      className="p-1 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
                       title="Share Room & Access Settings"
                     >
-                      <Share2 className="w-4 h-4" />
+                      <Share2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
 
                     {isRoomHost && room.id && room.id !== 'undefined' && (
                       <button
                         onClick={() => setDeleteTargetRoomId(room.id)}
-                        className="p-1.5 rounded-lg text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        className="p-1 sm:p-1.5 rounded-lg text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                         title="Delete Room"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                       </button>
                     )}
 
                     <button
                       onClick={refreshFiles}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                      className="p-1 sm:p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
                       title="Refresh feed"
                     >
-                      <RefreshCw className="w-4 h-4" />
+                      <RefreshCw className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
                   </div>
                 </header>
@@ -355,10 +373,16 @@ function AppPage() {
                   {/* A. Files Mode viewport */}
                   {activeMode === 'files' && (
                     <div className="space-y-6">
-                      <UploadForm 
-                        uploadFile={uploadFile} 
-                        isUploading={status.isUploading} 
-                      />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <UploadForm 
+                          uploadFile={uploadFile} 
+                          isUploading={status.isUploading} 
+                        />
+                        <VoiceRecorder
+                          onUpload={uploadFile}
+                          isUploading={status.isUploading}
+                        />
+                      </div>
                       <FileListFeed 
                         room={room}
                         downloadProgress={downloadProgress}
@@ -379,24 +403,16 @@ function AppPage() {
                     />
                   )}
 
-                  {/* C. Voice Drop viewport */}
-                  {activeMode === 'voice' && (
-                    <div className="animate-scaleUp">
-                      <VoiceRecorder
-                        onUpload={uploadFile}
-                        isUploading={status.isUploading}
-                      />
-                    </div>
-                  )}
-
-                  {/* D. Screen Share viewport */}
+                  {/* C. Screen Share viewport */}
                   {activeMode === 'screen' && (
                     <div className="animate-scaleUp">
                       <ScreenShare
                         isSharing={screenShare.isSharing}
                         stream={screenShare.stream}
                         remoteStream={screenShare.remoteStream}
+                        shareType={screenShare.shareType}
                         onStart={startScreenShare}
+                        onStartWebcam={startWebcamShare}
                         onStop={stopScreenShare}
                       />
                     </div>

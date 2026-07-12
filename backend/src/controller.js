@@ -512,8 +512,8 @@ export const getPreview = async (req, res, next) => {
         if (error) throw error;
         if (!file) return next(new AppError('File not found.', 404));
 
-        // Only allow previews for images and videos
-        if (!file.mime_type.startsWith('image/') && !file.mime_type.startsWith('video/')) {
+        // Only allow previews for images, videos, and audios
+        if (!file.mime_type.startsWith('image/') && !file.mime_type.startsWith('video/') && !file.mime_type.startsWith('audio/')) {
             return next(new AppError('Preview not available for this file type.', 400));
         }
 
