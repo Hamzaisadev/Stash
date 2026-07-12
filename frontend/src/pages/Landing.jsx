@@ -10,7 +10,7 @@ function Landing() {
           <span className="text-[15px] font-bold tracking-tight text-white">Stash</span>
           <div className="flex items-center gap-6">
             <a href="https://github.com" target="_blank" rel="noopener" className="text-[13px] text-[#888] hover:text-white transition-colors">GitHub</a>
-            <a href="/app" className="text-[13px] font-medium text-black bg-white hover:bg-[#e0e0e0] px-4 py-1.5 rounded-lg transition-colors">Open Stash</a>
+            <a href="/rooms" className="text-[13px] font-medium text-black bg-white hover:bg-[#e0e0e0] px-4 py-1.5 rounded-lg transition-colors">Open Stash</a>
           </div>
         </div>
       </nav>
@@ -28,7 +28,7 @@ function Landing() {
             </p>
           </div>
           <div className="mt-10 flex items-center justify-center gap-4 animate-fadeUp stagger-2">
-            <a href="/app" className="inline-flex items-center gap-2 bg-white text-black text-[14px] font-semibold px-6 py-3 rounded-xl hover:bg-[#e8e8e8] transition-all hover:scale-[1.02] active:scale-[0.98]">
+            <a href="/rooms" className="inline-flex items-center gap-2 bg-white text-black text-[14px] font-semibold px-6 py-3 rounded-xl hover:bg-[#e8e8e8] transition-all hover:scale-[1.02] active:scale-[0.98]">
               Open Stash
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </a>
@@ -72,7 +72,7 @@ function Landing() {
           <p className="text-[15px] leading-relaxed text-[#777] max-w-lg mx-auto mb-8">
             Open Stash on your laptop and your phone. If they share a network, they find each other automatically. No QR codes, no pairing screens, no Bluetooth fumbling. Different network? Create a named room like <span className="font-mono text-[#999] bg-white/[0.04] px-1.5 py-0.5 rounded">/design-team</span> and share the link. Works across cities.
           </p>
-          <a href="/app" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
+          <a href="/rooms" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
             Try instant sharing
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
@@ -91,7 +91,7 @@ function Landing() {
           <p className="text-[15px] leading-relaxed text-[#777] max-w-lg mx-auto mb-8">
             Hold the mic button, say what you need to say, release. Your voice drops into the room feed alongside your files. Tell your teammate to check slide three instead of opening a separate chat to explain it.
           </p>
-          <a href="/app" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
+          <a href="/rooms" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
             Record a voice drop
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
@@ -110,7 +110,7 @@ function Landing() {
           <p className="text-[15px] leading-relaxed text-[#777] max-w-lg mx-auto mb-8">
             Click share, pick a window, and everyone in the room sees it live. No meetings, no calendar invites, no "can everyone see my screen" moments. Uses the same peer-to-peer technology that powers your file transfers.
           </p>
-          <a href="/app" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
+          <a href="/rooms" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
             Share your screen
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
@@ -132,7 +132,7 @@ function Landing() {
           <p className="text-[15px] leading-relaxed text-[#777] max-w-lg mx-auto mb-8">
             Photos and videos are viewable right in the browser. They stream, they don't download. Your media stays in Stash, not scattered across Downloads folders.
           </p>
-          <a href="/app" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
+          <a href="/rooms" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
             Stash something private
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>
@@ -151,7 +151,7 @@ function Landing() {
           <p className="text-[15px] leading-relaxed text-[#777] max-w-lg mx-auto mb-8">
             Not everything is a file. Sometimes you just need to move a URL, a code snippet, or a Wi-Fi password between devices. Type it into the shared clipboard and it shows up on every device in the room. Instantly.
           </p>
-          <a href="/app" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
+          <a href="/rooms" className="inline-flex items-center gap-2 text-[13px] font-semibold text-white border border-white/[0.12] px-5 py-2.5 rounded-xl hover:bg-white/[0.04] transition-all">
             Open clipboard
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </a>

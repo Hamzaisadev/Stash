@@ -6,10 +6,19 @@ export default function SettingsDrawer({
     rotateStackKey, 
     approveGuest, 
     denyGuest,
+    deleteRoom,
     isOpen,
     onClose
 }) {
     const [requests, setRequests] = useState([]);
+    const [localName, setLocalName] = useState(room.name || '');
+    const [localDescription, setLocalDescription] = useState(room.description || '');
+
+    // Synchronize local inputs with room props when room changes
+    useEffect(() => {
+        setLocalName(room.name || '');
+        setLocalDescription(room.description || '');
+    }, [room.id, room.name, room.description]);
 
     useEffect(() => {
         const handleRequest = (e) => {
@@ -57,18 +66,18 @@ export default function SettingsDrawer({
                         <input 
                             type="text" 
                             className="w-full bg-[#2A2A2D] text-white rounded px-3 py-2 mt-1 focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700"
-                            value={room.name || ''}
-                            onChange={(e) => updateRoomSettings(room.id, { name: e.target.value })}
-                            onBlur={(e) => updateRoomSettings(room.id, { name: e.target.value })}
+                            value={localName}
+                            onChange={(e) => setLocalName(e.target.value)}
+                            onBlur={() => updateRoomSettings(room.id, { name: localName })}
                         />
                     </div>
                     <div>
                         <label className="text-sm text-gray-400">Description</label>
                         <textarea 
                             className="w-full bg-[#2A2A2D] text-white rounded px-3 py-2 mt-1 focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 text-sm"
-                            value={room.description || ''}
-                            onChange={(e) => updateRoomSettings(room.id, { description: e.target.value })}
-                            onBlur={(e) => updateRoomSettings(room.id, { description: e.target.value })}
+                            value={localDescription}
+                            onChange={(e) => setLocalDescription(e.target.value)}
+                            onBlur={() => updateRoomSettings(room.id, { description: localDescription })}
                             rows="2"
                         />
                     </div>
@@ -141,6 +150,21 @@ export default function SettingsDrawer({
                         </div>
                     </div>
                 )}
+
+                {/* Delete Room Option */}
+                <div className="pt-6 border-t border-gray-800">
+                    <button
+                        onClick={() => {
+                            if (window.confirm("Are you sure you want to delete this room and all its files? This action is permanent.")) {
+                                deleteRoom(room.id);
+                                onClose();
+                            }
+                        }}
+                        className="w-full py-2.5 rounded-xl bg-red-600/10 hover:bg-red-600/20 text-red-500 hover:text-red-400 font-medium transition-colors border border-red-500/20"
+                    >
+                        Delete Room
+                    </button>
+                </div>
             </div>
         </div>
     );

@@ -14,8 +14,17 @@ function App() {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  // Intercept QR Code scans that land on '/' with query parameters (e.g., ?download=id)
+  // Intercept QR Code scans that land with query parameters (e.g., ?download=id)
   const hasDownloadParam = new URLSearchParams(window.location.search).has('download');
+
+  // Redirection handler to route legacy and flat room links (e.g. /room-id) into /rooms/room-id
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path !== '/' && !path.startsWith('/rooms') && !path.includes('.')) {
+      window.history.replaceState({}, '', `/rooms${path}`);
+      setCurrentRoute(`/rooms${path}`);
+    }
+  }, [currentRoute]);
 
   if (currentRoute === '/' && !hasDownloadParam) {
     return <Landing />;

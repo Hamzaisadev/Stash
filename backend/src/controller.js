@@ -25,10 +25,39 @@ const hashIp = (ip) => {
     return crypto.createHash("sha256").update(cleanIp).digest('hex').substring(0, 12);
 };
 
+const cleanupExpiredRooms = async () => {
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000; // Auto-delete rooms older than 24 hours
+    const threshold = now - ONE_DAY;
+    try {
+        const { data: expiredRooms } = await supabase
+            .from('rooms')
+            .select('id')
+            .lt('created_at', threshold)
+            .neq('creator_socket_id', 'system'); // Keep default system rooms
+
+        if (expiredRooms && expiredRooms.length > 0) {
+            const roomIds = expiredRooms.map(r => r.id);
+            const { data: files } = await supabase.from('files').select('file_path').in('room_id', roomIds);
+            if (files && files.length > 0) {
+                const paths = files.map(f => f.file_path);
+                await supabase.storage.from('stash-files').remove(paths);
+                await supabase.from('files').delete().in('room_id', roomIds);
+            }
+            await supabase.from('rooms').delete().in('id', roomIds);
+            console.log(`Pruned ${expiredRooms.length} expired rooms.`);
+        }
+    } catch (err) {
+        console.error("Error during room pruning:", err);
+    }
+};
+
 // Helper: Clean up expired files from PostgreSQL and Supabase S3 Storage (Lazy Cleanup)
 const cleanupExpiredFiles = async () => {
     const now = Date.now();
     try {
+        await cleanupExpiredRooms();
+        
         // Query expired files from database
         const { data: expiredFiles, error } = await supabase
             .from('files')
@@ -75,13 +104,36 @@ export const uploadFile = async (req, res, next) => {
         const { password, expires_in, max_downloads } = req.body;
 
         const clientIP = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
-        const room_id = req.body.room_id || hashIp(clientIP);
+        let room_id = req.body.room_id;
+        if (!room_id || room_id === 'undefined' || room_id === 'null' || room_id.trim() === '') {
+            room_id = hashIp(clientIP);
+        }
+        console.log("UPLOAD: Resolved room_id to:", room_id);
 
         // Enforce room authorization check
         const token = req.headers['x-room-access-token'] || req.body.room_access_token;
         const hostId = req.headers['x-host-id'] || req.body.host_id;
 
-        const { data: roomData } = await supabase.from('rooms').select('*').eq('id', room_id).maybeSingle();
+        let { data: roomData } = await supabase.from('rooms').select('*').eq('id', room_id).maybeSingle();
+        if (!roomData) {
+            const { data: newRoom, error: createErr } = await supabase
+                .from('rooms')
+                .insert([{
+                    id: room_id,
+                    name: room_id === hashIp(clientIP) ? 'Local Network Room' : room_id,
+                    description: 'Auto-created room',
+                    is_protected: false,
+                    accept_only: false,
+                    creator_socket_id: 'system',
+                    created_at: Date.now()
+                }])
+                .select()
+                .single();
+
+            if (createErr) throw createErr;
+            roomData = newRoom;
+        }
+
         if (roomData) {
             const hasNoSecurity = !roomData.is_protected && !roomData.stack_key && !roomData.accept_only;
             const isHost = hostId && roomData.creator_socket_id === hostId;
@@ -383,7 +435,7 @@ export const getRoom = async (req, res, next) => {
                 .from('rooms')
                 .insert([{
                     id: room_id,
-                    name: 'Local Network Room',
+                    name: 'Stash Default',
                     description: 'Auto-created room for devices on your network',
                     is_protected: false,
                     accept_only: false,
@@ -547,10 +599,24 @@ export const deleteFile = async (req, res, next) => {
  */
 export const createRoom = async (req, res, next) => {
     try {
-        const { id, name, description, is_protected, access_mode, host_id } = req.body;
+        const { id, name, description, is_protected, access_mode } = req.body;
+        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         if (!id || !name) {
             return next(new AppError('Room ID and Room Name are required.', 400));
+        }
+
+        // Limit check: max 5 created rooms per client
+        if (host_id && host_id !== 'system') {
+            const { data: userRooms, error: countError } = await supabase
+                .from('rooms')
+                .select('id')
+                .eq('creator_socket_id', host_id);
+
+            if (countError) throw countError;
+            if (userRooms && userRooms.length >= 5) {
+                return next(new AppError('You have reached the maximum limit of 5 created rooms.', 400));
+            }
         }
 
         const created_at = Date.now();
@@ -558,7 +624,7 @@ export const createRoom = async (req, res, next) => {
         let stack_key_expires_at = null;
         let accept_only = false;
 
-        if (access_mode === 'stack_key') {
+        if (access_mode === 'stack_key' || (is_protected && access_mode !== 'accept_only')) {
             stack_key = Math.floor(100000 + Math.random() * 900000).toString();
             stack_key_expires_at = Date.now() + 80000;
         } else if (access_mode === 'accept_only') {
@@ -610,6 +676,9 @@ export const getRoomDetails = async (req, res, next) => {
         const { room_id } = req.params;
         const hostId = req.headers['x-host-id'] || req.query.host_id;
 
+        // Lazy cleanup expired rooms in background
+        cleanupExpiredRooms().catch(err => console.error("Room pruning failed:", err));
+
         let { data: room, error } = await supabase
             .from('rooms')
             .select('*')
@@ -618,7 +687,22 @@ export const getRoomDetails = async (req, res, next) => {
 
         if (error) throw error;
         if (!room) {
-            return next(new AppError('Room not found.', 404));
+            const { data: newRoom, error: createErr } = await supabase
+                .from('rooms')
+                .insert([{
+                    id: room_id,
+                    name: room_id,
+                    description: 'Public shareable room',
+                    is_protected: false,
+                    accept_only: false,
+                    creator_socket_id: 'system',
+                    created_at: Date.now()
+                }])
+                .select()
+                .single();
+
+            if (createErr) throw createErr;
+            room = newRoom;
         }
 
         // Lazy key rotation check (rotates Stack Key every 80 seconds if it has expired)
@@ -680,7 +764,8 @@ export const getRoomDetails = async (req, res, next) => {
 export const joinRoom = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const { stack_key, client_id } = req.body;
+        const { stack_key } = req.body;
+        const client_id = req.headers['x-host-id'] || req.body.client_id;
 
         if (!client_id) {
             return next(new AppError('Client identity is required to join a room.', 400));
@@ -727,7 +812,8 @@ export const joinRoom = async (req, res, next) => {
 export const updateRoomSettings = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const { name, description, is_protected, access_mode, host_id } = req.body;
+        const { name, description, is_protected, accept_only } = req.body;
+        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         const { data: room, error } = await supabase
             .from('rooms')
@@ -740,26 +826,28 @@ export const updateRoomSettings = async (req, res, next) => {
             return next(new AppError('Room not found.', 404));
         }
 
-        if (room.creator_socket_id !== host_id) {
+        if (room.creator_socket_id !== 'system' && room.creator_socket_id !== host_id) {
             return next(new AppError('You are not authorized to update settings for this room.', 403));
+        }
+
+        let creator_socket_id = room.creator_socket_id;
+        if (creator_socket_id === 'system' && host_id) {
+            creator_socket_id = host_id;
         }
 
         let stack_key = room.stack_key;
         let stack_key_expires_at = room.stack_key_expires_at;
-        let accept_only = false;
 
-        if (access_mode === 'stack_key') {
-            if (!stack_key) {
-                stack_key = Math.floor(100000 + Math.random() * 900000).toString();
-                stack_key_expires_at = Date.now() + 80000;
+        if (is_protected !== undefined) {
+            if (is_protected) {
+                if (!stack_key) {
+                    stack_key = Math.floor(100000 + Math.random() * 900000).toString();
+                    stack_key_expires_at = Date.now() + 80000;
+                }
+            } else {
+                stack_key = null;
+                stack_key_expires_at = null;
             }
-        } else {
-            stack_key = null;
-            stack_key_expires_at = null;
-        }
-
-        if (access_mode === 'accept_only') {
-            accept_only = true;
         }
 
         const { data: updatedRoom, error: updateError } = await supabase
@@ -770,7 +858,8 @@ export const updateRoomSettings = async (req, res, next) => {
                 is_protected: is_protected !== undefined ? !!is_protected : room.is_protected,
                 stack_key,
                 stack_key_expires_at,
-                accept_only
+                accept_only: accept_only !== undefined ? !!accept_only : room.accept_only,
+                creator_socket_id
             })
             .eq('id', room_id)
             .select()
@@ -804,7 +893,7 @@ export const updateRoomSettings = async (req, res, next) => {
 export const rotateRoomKey = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const { host_id } = req.body;
+        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         const { data: room, error } = await supabase
             .from('rooms')
@@ -850,6 +939,68 @@ export const rotateRoomKey = async (req, res, next) => {
         res.status(200).json({
             status: 'success',
             data: { room: updatedRoom }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+/**
+ * 11. Delete Room Controller
+ */
+export const deleteRoomData = async (roomId) => {
+    // 1. Delete all room files in storage
+    const { data: files, error: filesError } = await supabase
+        .from('files')
+        .select('file_path')
+        .eq('room_id', roomId);
+
+    if (filesError) throw filesError;
+
+    if (files && files.length > 0) {
+        const paths = files.map(f => f.file_path);
+        await supabase.storage.from('stash-files').remove(paths);
+        await supabase.from('files').delete().eq('room_id', roomId);
+    }
+
+    // 2. Delete room from DB
+    const { error: deleteError } = await supabase
+        .from('rooms')
+        .delete()
+        .eq('id', roomId);
+
+    if (deleteError) throw deleteError;
+};
+
+/**
+ * 11. Delete Room Controller
+ */
+export const deleteRoom = async (req, res, next) => {
+    try {
+        const { room_id } = req.params;
+        const host_id = req.headers['x-host-id'] || req.body.host_id;
+
+        const { data: room, error } = await supabase
+            .from('rooms')
+            .select('*')
+            .eq('id', room_id)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!room) {
+            return next(new AppError('Room not found.', 404));
+        }
+
+        // Allow owner OR default system rooms to be deleted by their session initiator
+        if (room.creator_socket_id !== host_id && room.creator_socket_id !== 'system') {
+            return next(new AppError('Only the room host can delete this room.', 403));
+        }
+
+        await deleteRoomData(room_id);
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Room deleted successfully.'
         });
     } catch (err) {
         next(err);

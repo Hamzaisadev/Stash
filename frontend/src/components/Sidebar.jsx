@@ -1,4 +1,30 @@
 import React, { useState } from 'react';
+import { 
+  Sidebar as ShadcnSidebar, 
+  SidebarContent, 
+  SidebarGroup, 
+  SidebarGroupContent, 
+  SidebarGroupLabel, 
+  SidebarHeader, 
+  SidebarMenu, 
+  SidebarMenuItem, 
+  SidebarMenuButton,
+  SidebarFooter
+} from "@/components/ui/sidebar";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { 
+  Plus, 
+  Share2, 
+  Trash2, 
+  LogOut, 
+  FolderHeart,
+  FileText,
+  ClipboardList,
+  Mic,
+  MonitorPlay,
+  KeyRound
+} from "lucide-react";
 
 export default function Sidebar({
     myRooms,
@@ -6,7 +32,15 @@ export default function Sidebar({
     currentRoomId,
     setRoomId,
     createRoom,
-    fetchDefaultRoom
+    deleteRoom,
+    leaveRoom,
+    onOpenJoinModal,
+    fetchDefaultRoom,
+    activeMode,
+    onChangeMode,
+    roomFileCount,
+    clipboardCount,
+    onOpenShareForRoom
 }) {
     const [isCreating, setIsCreating] = useState(false);
     const [newRoomName, setNewRoomName] = useState('');
@@ -18,94 +52,193 @@ export default function Sidebar({
         if (res.success) {
             setIsCreating(false);
             setNewRoomName('');
+        } else {
+            alert(res.error || 'Failed to create room');
         }
     };
 
     return (
-        <div className="w-64 bg-[#111111] border-r border-gray-800 h-screen flex flex-col hidden md:flex shrink-0">
-            <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-white font-semibold text-lg cursor-pointer" onClick={() => fetchDefaultRoom()}>
-                    <svg className="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                    </svg>
-                    Stash
+        <ShadcnSidebar className="border-r border-slate-900 bg-[#0c0c10] select-none text-slate-200">
+            <SidebarHeader className="p-4 border-b border-slate-900/50">
+                <div 
+                    className="flex items-center gap-2.5 text-white font-bold text-base cursor-pointer hover:opacity-90 transition-opacity" 
+                    onClick={() => fetchDefaultRoom()}
+                >
+                    <FolderHeart className="w-5.5 h-5.5 text-indigo-500 fill-indigo-500/20" />
+                    <span className="tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">Stash</span>
                 </div>
-            </div>
+            </SidebarHeader>
 
-            <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6">
+            <SidebarContent className="px-3 py-4 space-y-6">
+                
+                {/* Stash Tools Section */}
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">
+                        Stash Tools
+                    </SidebarGroupLabel>
+                    <SidebarGroupContent>
+                        <SidebarMenu className="space-y-1">
+                            {[
+                                { id: 'files', label: 'Files', count: roomFileCount, icon: <FileText className="w-4 h-4" /> },
+                                { id: 'clipboard', label: 'Clipboard', count: clipboardCount, icon: <ClipboardList className="w-4 h-4" /> },
+                                { id: 'voice', label: 'Voice Notes', count: null, icon: <Mic className="w-4 h-4" /> },
+                                { id: 'screen', label: 'Screen Share', count: null, icon: <MonitorPlay className="w-4 h-4" /> }
+                            ].map(item => (
+                                <SidebarMenuItem key={item.id}>
+                                    <SidebarMenuButton
+                                        onClick={() => onChangeMode(item.id)}
+                                        isActive={activeMode === item.id}
+                                        className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer ${
+                                            activeMode === item.id 
+                                                ? 'bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/25' 
+                                                : 'text-slate-400 hover:bg-slate-900/50 hover:text-slate-200'
+                                        }`}
+                                    >
+                                        <span className={activeMode === item.id ? "text-white" : "text-slate-500"}>
+                                            {item.icon}
+                                        </span>
+                                        <span className="flex-grow">{item.label}</span>
+                                        {item.count !== null && item.count > 0 && (
+                                            <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full transition-all ${
+                                                activeMode === item.id ? 'bg-white/25 text-white' : 'bg-slate-900 text-slate-400'
+                                            }`}>
+                                                {item.count}
+                                            </span>
+                                        )}
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                            ))}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
                 
                 {/* My Rooms Section */}
-                <div>
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 flex justify-between items-center">
-                        My Rooms
-                        <button onClick={() => setIsCreating(!isCreating)} className="hover:text-white transition-colors">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                        </button>
-                    </div>
-                    {isCreating && (
-                        <form onSubmit={handleCreate} className="mb-2 px-2">
-                            <input 
-                                type="text" 
-                                autoFocus
-                                value={newRoomName}
-                                onChange={(e) => setNewRoomName(e.target.value)}
-                                placeholder="Room name..."
-                                className="w-full bg-[#1C1C1E] text-sm text-white rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700"
-                                onBlur={() => setIsCreating(false)}
-                            />
-                        </form>
-                    )}
-                    <ul className="space-y-1">
-                        {myRooms.map(r => (
-                            <li key={r.id}>
-                                <button
-                                    onClick={() => setRoomId(r.id)}
-                                    className={`w-full text-left px-2 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-colors ${
-                                        currentRoomId === r.id ? 'bg-[#2A2A2D] text-white' : 'text-gray-400 hover:bg-[#1C1C1E] hover:text-gray-200'
-                                    }`}
-                                >
-                                    <span className="truncate flex-1">{r.name || r.id}</span>
-                                </button>
-                            </li>
-                        ))}
-                        {myRooms.length === 0 && !isCreating && (
-                            <li className="px-2 py-1 text-xs text-gray-600">No rooms created yet.</li>
+                <SidebarGroup>
+                    <SidebarGroupLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1 flex justify-between items-center w-full">
+                        <span>My Rooms</span>
+                        <div className="flex items-center space-x-1.5 text-slate-500">
+                            <button onClick={() => setIsCreating(!isCreating)} className="hover:text-slate-200 transition-colors p-0.5" title="Create Room">
+                                <Plus className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={onOpenJoinModal} className="hover:text-slate-200 transition-colors p-0.5" title="Join Room Manually">
+                                <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </SidebarGroupLabel>
+                    
+                    <SidebarGroupContent className="space-y-2">
+                        {isCreating && (
+                            <form onSubmit={handleCreate} className="px-1 mb-1">
+                                <Input 
+                                    type="text" 
+                                    autoFocus
+                                    value={newRoomName}
+                                    onChange={(e) => setNewRoomName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Escape') {
+                                            setIsCreating(false);
+                                            setNewRoomName('');
+                                        }
+                                    }}
+                                    placeholder="Room name..."
+                                    className="bg-slate-950 border-slate-900 text-xs px-2.5 py-1.5 h-8 focus:ring-indigo-500"
+                                />
+                            </form>
                         )}
-                    </ul>
-                </div>
+                        <SidebarMenu className="space-y-1">
+                            {myRooms.map(r => (
+                                <SidebarMenuItem key={r.id} className="group/item relative flex items-center justify-between rounded-xl hover:bg-slate-900/40 transition-all">
+                                    <SidebarMenuButton
+                                        onClick={() => setRoomId(r.id)}
+                                        isActive={currentRoomId === r.id}
+                                        className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
+                                            currentRoomId === r.id ? 'bg-slate-900 text-white font-medium rounded-xl' : 'text-slate-400 hover:text-slate-200'
+                                        }`}
+                                    >
+                                        <span className="truncate flex-1 pr-12">{r.name || 'stash:default'}</span>
+                                    </SidebarMenuButton>
+                                    
+                                    <div className="absolute right-1.5 flex items-center space-x-1 shrink-0 opacity-100 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity pl-2 py-0.5 rounded-r-xl bg-transparent">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onOpenShareForRoom(r.id);
+                                            }}
+                                            className="p-1 hover:bg-slate-800 rounded-md text-slate-500 hover:text-white transition-colors"
+                                            title="Share & Security"
+                                        >
+                                            <Share2 className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteRoom(r.id);
+                                            }}
+                                            className="p-1 hover:bg-red-950/20 rounded-md text-slate-500 hover:text-red-400 transition-colors"
+                                            title="Delete Room"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </SidebarMenuItem>
+                            ))}
+                            {myRooms.length === 0 && !isCreating && (
+                                <li className="px-2.5 py-1 text-[11px] text-slate-600">No rooms created yet.</li>
+                            )}
+                        </SidebarMenu>
+                    </SidebarGroupContent>
+                </SidebarGroup>
 
                 {/* Joined Rooms Section */}
                 {joinedRooms.length > 0 && (
-                    <div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">
+                    <SidebarGroup>
+                        <SidebarGroupLabel className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">
                             Joined Rooms
-                        </div>
-                        <ul className="space-y-1">
-                            {joinedRooms.map(r => (
-                                <li key={r.id}>
-                                    <button
-                                        onClick={() => setRoomId(r.id)}
-                                        className={`w-full text-left px-2 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-colors ${
-                                            currentRoomId === r.id ? 'bg-[#2A2A2D] text-white' : 'text-gray-400 hover:bg-[#1C1C1E] hover:text-gray-200'
-                                        }`}
-                                    >
-                                        <span className="truncate flex-1">{r.id}</span>
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
+                        </SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu className="space-y-1">
+                                {joinedRooms.map(r => (
+                                    <SidebarMenuItem key={r.id} className="group/item relative flex items-center justify-between rounded-xl hover:bg-slate-900/40 transition-all">
+                                        <SidebarMenuButton
+                                            onClick={() => setRoomId(r.id)}
+                                            isActive={currentRoomId === r.id}
+                                            className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
+                                                currentRoomId === r.id ? 'bg-slate-900 text-white font-medium rounded-xl' : 'text-slate-400 hover:text-slate-200'
+                                            }`}
+                                        >
+                                            <span className="truncate flex-1 pr-12">{r.name || r.id}</span>
+                                        </SidebarMenuButton>
+                                        
+                                        <div className="absolute right-1.5 flex items-center space-x-1 shrink-0 opacity-100 md:opacity-0 md:group-hover/item:opacity-100 transition-opacity pl-2 py-0.5 rounded-r-xl bg-transparent">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onOpenShareForRoom(r.id);
+                                                }}
+                                                className="p-1 hover:bg-slate-800 rounded-md text-slate-500 hover:text-white transition-colors"
+                                                title="Share & Security"
+                                            >
+                                                <Share2 className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    leaveRoom(r.id);
+                                                }}
+                                                className="p-1 hover:bg-red-950/20 rounded-md text-slate-500 hover:text-yellow-500 transition-colors"
+                                                title="Leave Room"
+                                            >
+                                                <LogOut className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
                 )}
-            </div>
+            </SidebarContent>
 
-            <div className="p-4 border-t border-gray-800">
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    Connected to Server
-                </div>
-            </div>
-        </div>
+        </ShadcnSidebar>
     );
 }

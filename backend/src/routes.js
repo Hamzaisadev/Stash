@@ -12,7 +12,8 @@ import {
     getRoomDetails,
     joinRoom,
     updateRoomSettings,
-    rotateRoomKey
+    rotateRoomKey,
+    deleteRoom
 } from './controller.js';
 
 const router = express.Router();
@@ -23,6 +24,7 @@ router.get('/rooms/:room_id', getRoomDetails);
 router.post('/rooms/:room_id/join', joinRoom);
 router.post('/rooms/:room_id/update', updateRoomSettings);
 router.post('/rooms/:room_id/rotate-key', rotateRoomKey);
+router.delete('/rooms/:room_id', deleteRoom);
 
 // Files and Room Discovery
 router.get('/room', getRoom);

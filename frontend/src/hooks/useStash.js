@@ -15,8 +15,11 @@ const generateClientId = () => {
     return id;
 };
 
-const getAuthHeaders = (roomId = null) => {
-    const headers = { 'x-host-id': generateClientId(), 'Content-Type': 'application/json' };
+const getAuthHeaders = (roomId = null, isJson = false) => {
+    const headers = { 'x-host-id': generateClientId() };
+    if (isJson) {
+        headers['Content-Type'] = 'application/json';
+    }
     if (roomId) {
         const tokens = JSON.parse(localStorage.getItem('stash_room_tokens') || '{}');
         if (tokens[roomId]) headers['x-room-access-token'] = tokens[roomId];
@@ -347,15 +350,14 @@ export function useStash() {
                 return { require_password: json.require_password, accept_only: json.accept_only, room_id: json.room_id };
             }
             if (json.status === "success") {
-                setRoom(prev => ({ 
-                    ...prev, 
-                    id: json.data.id,
-                    description: json.data.description,
-                    is_protected: json.data.is_protected,
-                    accept_only: json.data.accept_only,
-                    stack_key: json.data.stack_key,
-                }));
-                return { success: true, room: json.data };
+                const rid = json.data.room_id;
+                setRoom(prev => ({ ...prev, id: rid }));
+                setJoinedRooms(prev => {
+                    if (prev.find(r => r.id === rid)) return prev;
+                    return [...prev, { id: rid, name: 'Stash Default' }];
+                });
+                fetchRoomDetails(rid);
+                return { success: true };
             }
             throw new Error(json.message);
         } catch (err) {
@@ -370,7 +372,7 @@ export function useStash() {
         setStatus(prev => ({ ...prev, isLoading: true, error: null }));
         setGate(null);
         try {
-            const res = await fetch(`${API_BASE}/room/${roomId}`, {
+            const res = await fetch(`${API_BASE}/rooms/${roomId}`, {
                 headers: getAuthHeaders(roomId)
             });
             const json = await res.json();
@@ -379,15 +381,37 @@ export function useStash() {
                 return { require_password: json.require_password, accept_only: json.accept_only, room_id: json.room_id };
             }
             if (json.status === "success") {
+                const roomInfo = json.data.room;
                 setRoom(prev => ({ 
                     ...prev, 
-                    id: json.data.id,
-                    description: json.data.description,
-                    is_protected: json.data.is_protected,
-                    accept_only: json.data.accept_only,
-                    stack_key: json.data.stack_key,
+                    id: roomInfo.id,
+                    name: roomInfo.name,
+                    description: roomInfo.description,
+                    is_protected: roomInfo.is_protected,
+                    accept_only: roomInfo.accept_only,
+                    stack_key: roomInfo.stack_key,
+                    creator_socket_id: roomInfo.creator_socket_id
                 }));
-                return { success: true, room: json.data };
+                
+                // Keep sidebar lists updated with the latest names
+                setJoinedRooms(prev => {
+                    const inMyRooms = myRooms.some(r => r.id === roomInfo.id);
+                    const inJoinedRooms = prev.some(r => r.id === roomInfo.id);
+                    if (inMyRooms) return prev;
+                    if (inJoinedRooms) {
+                        return prev.map(r => r.id === roomInfo.id ? { ...r, name: roomInfo.name } : r);
+                    }
+                    return [...prev, { id: roomInfo.id, name: roomInfo.name }];
+                });
+                
+                setMyRooms(prev => {
+                    if (prev.some(r => r.id === roomInfo.id)) {
+                        return prev.map(r => r.id === roomInfo.id ? { ...r, name: roomInfo.name } : r);
+                    }
+                    return prev;
+                });
+                
+                return { success: true, room: roomInfo };
             }
             throw new Error(json.message);
         } catch (err) {
@@ -416,24 +440,41 @@ export function useStash() {
 
     const createRoom = async (roomData) => {
         try {
-            const res = await fetch(`${API_BASE}/room`, {
+            const roomId = roomData.id || Math.random().toString(36).substring(2, 10);
+            const payload = {
+                id: roomId,
+                name: roomData.name,
+                description: roomData.description || '',
+                is_protected: !!roomData.is_protected,
+                access_mode: roomData.access_mode || 'none'
+            };
+            const res = await fetch(`${API_BASE}/rooms`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(roomData)
+                headers: getAuthHeaders(null, true),
+                body: JSON.stringify(payload)
             });
             const json = await res.json();
             if (json.status === 'success') {
-                const newRoomId = json.data.id;
+                const newRoomId = json.data.room.id;
                 
                 // Store token
                 const tokens = JSON.parse(localStorage.getItem('stash_room_tokens') || '{}');
-                tokens[newRoomId] = json.token;
+                tokens[newRoomId] = json.data.token;
                 localStorage.setItem('stash_room_tokens', JSON.stringify(tokens));
                 
                 // Add to myRooms
-                setMyRooms(prev => [...prev.filter(r => r.id !== newRoomId), { id: newRoomId, name: json.data.name }]);
-                setRoom(prev => ({ ...prev, id: newRoomId, ...json.data }));
-                return { success: true, room: json.data };
+                setMyRooms(prev => [...prev.filter(r => r.id !== newRoomId), { id: newRoomId, name: json.data.room.name }]);
+                setRoom(prev => ({ 
+                    ...prev, 
+                    id: newRoomId, 
+                    name: json.data.room.name,
+                    description: json.data.room.description,
+                    is_protected: json.data.room.is_protected,
+                    accept_only: json.data.room.accept_only,
+                    stack_key: json.data.room.stack_key,
+                    creator_socket_id: json.data.room.creator_socket_id
+                }));
+                return { success: true, room: json.data.room };
             }
             throw new Error(json.message);
         } catch (err) {
@@ -443,9 +484,9 @@ export function useStash() {
 
     const joinRoomWithKey = async (roomId, password) => {
         try {
-            const res = await fetch(`${API_BASE}/room/${roomId}/join`, {
+            const res = await fetch(`${API_BASE}/rooms/${roomId}/join`, {
                 method: 'POST',
-                headers: getAuthHeaders(),
+                headers: getAuthHeaders(null, true),
                 body: JSON.stringify({ password })
             });
             const json = await res.json();
@@ -483,9 +524,9 @@ export function useStash() {
 
     const updateRoomSettings = async (roomId, settingsData) => {
         try {
-            const res = await fetch(`${API_BASE}/room/${roomId}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(roomId),
+            const res = await fetch(`${API_BASE}/rooms/${roomId}/update`, {
+                method: 'POST',
+                headers: getAuthHeaders(roomId, true),
                 body: JSON.stringify(settingsData)
             });
             const json = await res.json();
@@ -501,7 +542,7 @@ export function useStash() {
 
     const rotateStackKey = async (roomId) => {
         try {
-            const res = await fetch(`${API_BASE}/room/${roomId}/rotate-key`, {
+            const res = await fetch(`${API_BASE}/rooms/${roomId}/rotate-key`, {
                 method: 'POST',
                 headers: getAuthHeaders(roomId)
             });
@@ -516,22 +557,71 @@ export function useStash() {
         }
     };
 
-    // Load default room on mount (with friendly URL routing)
-    useEffect(() => {
-        const path = window.location.pathname.substring(1);
-        if (path && path.trim() !== "" && !path.includes('.') && path !== 'api') {
-            const rid = decodeURIComponent(path);
-            setRoom(prev => ({ ...prev, id: rid }));
-            fetchRoomDetails(rid);
-        } else {
+    const deleteRoom = async (roomId) => {
+        try {
+            const res = await fetch(`${API_BASE}/rooms/${roomId}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders(roomId)
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                setMyRooms(prev => prev.filter(r => r.id !== roomId));
+                setJoinedRooms(prev => prev.filter(r => r.id !== roomId));
+                fetchDefaultRoom(); // Go back to default room
+                return { success: true };
+            }
+            throw new Error(json.message);
+        } catch (err) {
+            return { error: err.message };
+        }
+    };
+
+    const leaveRoom = (roomId) => {
+        setJoinedRooms(prev => prev.filter(r => r.id !== roomId));
+        if (room.id === roomId) {
             fetchDefaultRoom();
         }
+    };
+
+    // Load default room on mount (with friendly URL routing under /rooms/:room_id)
+    useEffect(() => {
+        const path = window.location.pathname;
+        if (path.startsWith('/rooms/')) {
+            const rid = decodeURIComponent(path.substring(7));
+            if (rid && rid.trim() !== "" && rid !== 'undefined') {
+                const cached = [...myRooms, ...joinedRooms].find(r => r.id === rid);
+                setRoom(prev => ({ 
+                    ...prev, 
+                    id: rid, 
+                    name: cached ? cached.name : '',
+                    description: cached ? cached.description : '',
+                    is_protected: cached ? cached.is_protected : false,
+                    accept_only: cached ? cached.accept_only : false,
+                    stack_key: cached ? cached.stack_key : null
+                }));
+                fetchRoomDetails(rid);
+                return;
+            }
+        }
+        fetchDefaultRoom();
     }, []);
 
-    // Join room on Socket and fetch its files whenever room.id changes
+    // Sync room.id with browser URL path address bar
+    useEffect(() => {
+        if (room.id) {
+            const currentPath = window.location.pathname;
+            const expectedPath = `/rooms/${room.id}`;
+            if (currentPath !== expectedPath) {
+                window.history.pushState({}, '', expectedPath);
+            }
+        }
+    }, [room.id]);
+
+    // Join room on Socket and fetch its files + details whenever room.id changes
     useEffect(() => {
         if (!room.id) return;
         fetchRoomFiles(room.id);
+        fetchRoomDetails(room.id);
         if (socketRef.current) {
             socketRef.current.emit("join-room", room.id);
         }
@@ -639,7 +729,7 @@ export function useStash() {
         try {
             const res = await fetch(`${API_BASE}/download/${fileId}`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: getAuthHeaders(room.id, true),
                 body: JSON.stringify({ password: filePassword })
             });
 
@@ -985,7 +1075,18 @@ export function useStash() {
         clientId,
         myRooms,
         joinedRooms,
-        setRoomId: (id) => setRoom(prev => ({ ...prev, id })),
+        setRoomId: (id) => {
+            const cached = [...myRooms, ...joinedRooms].find(r => r.id === id);
+            setRoom({
+                id,
+                name: cached ? cached.name : '',
+                description: cached ? cached.description : '',
+                is_protected: cached ? cached.is_protected : false,
+                accept_only: cached ? cached.accept_only : false,
+                stack_key: cached ? cached.stack_key : null,
+                files: []
+            });
+        },
         fetchDefaultRoom,
         fetchRoomDetails,
         refreshFiles: () => fetchRoomFiles(room.id),
@@ -993,6 +1094,8 @@ export function useStash() {
         downloadFile,
         deleteFile,
         createRoom,
+        deleteRoom,
+        leaveRoom,
         joinRoomWithKey,
         requestAccessAcceptOnly,
         approveGuest,

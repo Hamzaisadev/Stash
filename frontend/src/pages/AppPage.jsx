@@ -1,12 +1,47 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStash } from '../hooks/useStash.js';
 import FileCard from '../components/FileCard.jsx';
-import ActionBar from '../components/ActionBar.jsx';
 import VoiceRecorder from '../components/VoiceRecorder.jsx';
 import ScreenShare from '../components/ScreenShare.jsx';
 import Sidebar from '../components/Sidebar.jsx';
-import SettingsDrawer from '../components/SettingsDrawer.jsx';
 import GateScreen from '../components/GateScreen.jsx';
+import UploadForm from '../components/UploadForm.jsx';
+import FileListFeed from '../components/FileListFeed.jsx';
+import ClipboardFeed from '../components/ClipboardFeed.jsx';
+
+// Shadcn UI components
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
+
+// Lucide Icons
+import { 
+  Pencil, 
+  Share2, 
+  Trash2, 
+  RefreshCw, 
+  AlertCircle, 
+  Unlock, 
+  Lock, 
+  QrCode, 
+  Copy, 
+  ExternalLink,
+  Info,
+  RotateCw,
+  LogOut,
+  X
+} from "lucide-react";
 
 function AppPage() {
   const {
@@ -18,6 +53,7 @@ function AppPage() {
     gate,
     myRooms,
     joinedRooms,
+    clientId,
     setRoomId,
     fetchDefaultRoom,
     fetchRoomDetails,
@@ -26,6 +62,8 @@ function AppPage() {
     downloadFile,
     deleteFile,
     createRoom,
+    deleteRoom: deleteRoomHook,
+    leaveRoom: leaveRoomHook,
     joinRoomWithKey,
     requestAccessAcceptOnly,
     approveGuest,
@@ -39,32 +77,44 @@ function AppPage() {
     stopScreenShare
   } = useStash();
 
+  const isRoomHost = room.creator_socket_id === clientId || room.creator_socket_id === 'system';
+
   // Mode and form states
   const [activeMode, setActiveMode] = useState('files'); // files, clipboard, voice, screen
-  const [showSettings, setShowSettings] = useState(false);
-  const [uploadForm, setUploadForm] = useState({
-    files: [],
-    password: "",
-    expiresIn: "20", // default to 20 mins for security
-    maxDownloads: "",
-    burnAfterDownload: false
-  });
 
-  const [copied, setCopied] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
+  // Modals state variables
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinRoomId, setJoinRoomId] = useState("");
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [requests, setRequests] = useState([]);
+
+  const [deleteTargetRoomId, setDeleteTargetRoomId] = useState(null);
+  const [leaveTargetRoomId, setLeaveTargetRoomId] = useState(null);
+
   const [unlockingFile, setUnlockingFile] = useState(null);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [downloadError, setDownloadError] = useState(null);
   const [activeQrFile, setActiveQrFile] = useState(null);
-  const [clipboardText, setClipboardText] = useState("");
 
-  const fileInputRef = useRef(null);
-
-  // Helper: Verify if current browser uploaded file
-  const isOwner = (fileId) => {
-    const myUploads = JSON.parse(localStorage.getItem('stash_my_uploads') || '[]');
-    return myUploads.includes(fileId);
-  };
+  // Sync access requests from socket
+  useEffect(() => {
+    const handleRequest = (e) => {
+      const data = e.detail;
+      if (data.roomId === room.id) {
+        setRequests(prev => {
+          if (prev.find(r => r.clientId === data.clientId)) return prev;
+          return [...prev, data];
+        });
+      }
+    };
+    window.addEventListener('stash-join-request', handleRequest);
+    return () => window.removeEventListener('stash-join-request', handleRequest);
+  }, [room.id]);
 
   // URL Interception for QR code scans
   useEffect(() => {
@@ -81,104 +131,87 @@ function AppPage() {
     }
   }, [room.files]);
 
-  // Copy friendly share link
+  // Copy Room Link Helper
+  const handleCopyInviteLink = () => {
+    const inviteLink = `${window.location.origin}/rooms/${room.id}`;
+    navigator.clipboard.writeText(inviteLink);
+    toast.success("Invite link copied to clipboard!");
+  };
+
+  // Copy Room ID Helper
   const handleCopyRoomId = () => {
-    if (!room.id) return;
-    const shareableUrl = `${window.location.origin}/${encodeURIComponent(room.id)}`;
-    navigator.clipboard.writeText(shareableUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(room.id);
+    toast.success("Room ID copied to clipboard!");
   };
 
-  // Create a brand new unique private room
-  const handleCreateNewRoom = () => {
-    const newRoomId = Math.random().toString(36).substring(2, 10);
-    window.history.pushState({}, '', `/${newRoomId}`);
-    setRoomId(newRoomId);
-  };
-
-  // Drag and drop entry flatting
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
+  // Handle open Share Modal for a specific room
+  const handleOpenShareForRoom = (roomId) => {
+    if (room.id !== roomId) {
+      setRoomId(roomId);
     }
+    setShowShareModal(true);
   };
 
-  const readAllEntries = async (entry) => {
-    if (entry.isFile) {
-      return new Promise((resolve) => {
-        entry.file((f) => resolve([f]));
-      });
-    } else if (entry.isDirectory) {
-      const dirReader = entry.createReader();
-      const entries = await new Promise((resolve) => {
-        dirReader.readEntries((results) => resolve(results));
-      });
-      const allFiles = [];
-      for (const child of entries) {
-        const childFiles = await readAllEntries(child);
-        allFiles.push(...childFiles);
-      }
-      return allFiles;
-    }
-    return [];
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const items = e.dataTransfer.items;
-    if (items && items.length > 0) {
-      const allFiles = [];
-      const entries = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const entry = items[i].webkitGetAsEntry?.();
-        if (entry) entries.push(entry);
-      }
-
-      if (entries.length > 0) {
-        for (const entry of entries) {
-          const files = await readAllEntries(entry);
-          allFiles.push(...files);
+  // Native share sheet trigger
+  const handleNativeShare = async () => {
+    const inviteLink = `${window.location.origin}/rooms/${room.id}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join Stash Room: ${room.name || 'default'}`,
+          text: `Use Stash to share files, clipboard items, and screens instantly in this private room!`,
+          url: inviteLink
+        });
+        toast.success("Native share sheet opened!");
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          toast.error("Failed to trigger native sharing sheet");
         }
       }
-
-      if (allFiles.length > 0) {
-        setUploadForm(prev => ({ ...prev, files: allFiles }));
-      } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        setUploadForm(prev => ({ ...prev, files: Array.from(e.dataTransfer.files) }));
-      }
+    } else {
+      navigator.clipboard.writeText(inviteLink);
+      toast.success("Invite link copied! Native sharing not supported on this device.");
     }
   };
 
-  // Submit file upload
-  const handleUploadSubmit = async (e) => {
-    e.preventDefault();
-    if (!uploadForm.files || uploadForm.files.length === 0) return;
+  // Rotate Stack Key
+  const handleRotateKey = async () => {
+    const res = await rotateStackKey(room.id);
+    if (res.success) {
+      toast.success(`Rotated Stack Key to: ${res.stack_key}`);
+    } else {
+      toast.error(res.error || "Failed to rotate stack key");
+    }
+  };
 
-    const success = await uploadFile(uploadForm.files, {
-      password: uploadForm.password,
-      expiresIn: uploadForm.expiresIn,
-      maxDownloads: uploadForm.burnAfterDownload ? "1" : uploadForm.maxDownloads
+  // Handle Guest approvals
+  const handleApprove = (guestClientId, guestSocketId) => {
+    approveGuest(room.id, guestSocketId, guestClientId);
+    setRequests(prev => prev.filter(r => r.clientId !== guestClientId));
+    toast.success("Guest access approved!");
+  };
+
+  const handleDeny = (guestClientId, guestSocketId) => {
+    denyGuest(room.id, guestSocketId);
+    setRequests(prev => prev.filter(r => r.clientId !== guestClientId));
+    toast.error("Guest access denied!");
+  };
+
+  // Edit Room Settings handler
+  const handleEditRoomSubmit = async (e) => {
+    e.preventDefault();
+    if (!editName.trim()) return toast.error("Room name is required");
+
+    const res = await updateRoomSettings(room.id, {
+      name: editName.trim(),
+      description: editDescription.trim()
     });
 
-    if (success) {
-      setUploadForm({
-        files: [],
-        password: "",
-        expiresIn: "20",
-        maxDownloads: "",
-        burnAfterDownload: false
-      });
-      setShowSettings(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+    if (res.success) {
+      toast.success("Room details updated successfully!");
+      setShowEditModal(false);
+    } else {
+      toast.error(res.error || "Failed to update room details");
     }
   };
 
@@ -200,450 +233,596 @@ function AppPage() {
       setUnlockingFile(null);
       setUnlockPassword("");
       setDownloadError(null);
+      toast.success("File unlocked and downloaded!");
     } else {
       setDownloadError(result.error);
+      toast.error(result.error || "Incorrect password");
     }
   };
 
-  // Clipboard message trigger
-  const handleClipboardSend = (e) => {
-    e.preventDefault();
-    if (!clipboardText.trim()) return;
-    sendClipboard(clipboardText);
-    setClipboardText("");
-  };
-
-  // Format size bytes
-  const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  // Qr codes server URL
+  // Qr codes server URL for files
   const getQrCodeUrl = (fileId) => {
     const link = `${window.location.origin}?download=${fileId}`;
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=6366f1&bgcolor=0f172a&data=${encodeURIComponent(link)}`;
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#07070a] text-slate-200 font-sans selection:bg-indigo-500/30">
-      <Sidebar 
-        myRooms={myRooms}
-        joinedRooms={joinedRooms}
-        currentRoomId={room.id}
-        setRoomId={setRoomId}
-        createRoom={createRoom}
-        fetchDefaultRoom={fetchDefaultRoom}
-      />
-      <div 
-        className="flex-1 flex flex-col relative h-full overflow-y-auto"
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
-      >
-        {gate ? (
-          <GateScreen 
-            gate={gate} 
-            joinRoomWithKey={joinRoomWithKey} 
-            requestAccessAcceptOnly={requestAccessAcceptOnly} 
-            fetchRoomDetails={fetchRoomDetails} 
-          />
-        ) : (
-          <div className="pb-32 pt-6 px-4">
-            <div className="max-w-2xl mx-auto space-y-6">
-
-        {/* Minimal Collapsible Header Menu */}
-        <header className="flex items-center justify-between bg-slate-900/40 backdrop-blur-xl border border-slate-900 rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center space-x-2">
-            <span className="text-lg font-black tracking-tighter text-white">Stash</span>
-            <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-950/80 px-1.5 py-0.5 rounded border border-slate-900">v2.0</span>
-          </div>
-
-          <div className="flex items-center bg-slate-950/60 border border-slate-900 rounded-xl px-3 py-1.5 space-x-2">
-            <div className="flex flex-col text-left">
-              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Active Room</span>
-              <span className="font-mono text-xs text-indigo-400 font-bold select-all leading-normal">
-                {room.id || "Resolving..."}
-              </span>
-            </div>
-
-            <div className="flex items-center space-x-1.5 border-l border-slate-900 pl-2.5">
-              {/* Create New Room Button */}
-              <button
-                onClick={handleCreateNewRoom}
-                className="p-1 rounded-md text-slate-500 hover:text-slate-200 hover:bg-slate-900/50 transition-colors"
-                title="Create New Private Room"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              </button>
-
-              <button
-                onClick={handleCopyRoomId}
-                className={`p-1 rounded-md transition-all ${copied ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-500 hover:text-slate-200'}`}
-                title="Copy Invite Link"
-              >
-                {copied ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5" /></svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                )}
-              </button>
-
-              <button
-                onClick={() => setShowSettings(true)}
-                className="p-1 rounded-md text-slate-500 hover:text-slate-200"
-                title="Room Settings"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" /></svg>
-              </button>
-
-              <button
-                onClick={refreshFiles}
-                className="p-1 rounded-md text-slate-500 hover:text-slate-200"
-                title="Refresh feed"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67" /></svg>
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Global errors banner */}
-        {status.error && (
-          <div className="bg-red-950/20 border border-red-500/20 text-red-400 rounded-xl p-3 flex items-center space-x-2 text-xs">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-            <span>{status.error}</span>
-          </div>
-        )}
-
-        {/* ==========================================
-            Interactive Content Feeds Switcher
-            ========================================== */}
-        <main className="space-y-6">
-
-          {/* A. Files Mode viewport */}
-          {activeMode === 'files' && (
-            <div className="space-y-6">
-
-              {/* Expanding Upload Form */}
-              <form onSubmit={handleUploadSubmit} className="bg-slate-900/20 border border-slate-900 rounded-2xl p-5 space-y-4" onDragEnter={handleDrag}>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-950/20 hover:bg-slate-950/40 ${dragActive ? 'border-indigo-400 bg-indigo-500/5' : (uploadForm.files && uploadForm.files.length > 0) ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-slate-850 hover:border-slate-800'}`}
-                >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    multiple
-                    onChange={(e) => setUploadForm(prev => ({ ...prev, files: e.target.files ? Array.from(e.target.files) : [] }))}
-                    className="hidden"
-                  />
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`mb-2 ${dragActive || (uploadForm.files && uploadForm.files.length > 0) ? 'text-indigo-400' : 'text-slate-600'}`}>
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                  </svg>
-                  <span className="text-xs font-semibold text-center truncate max-w-xs px-2">
-                    {uploadForm.files && uploadForm.files.length > 0
-                      ? (uploadForm.files.length === 1
-                        ? uploadForm.files[0].name
-                        : `${uploadForm.files.length} items ready to stash`)
-                      : "Drag files, folders or select to upload"}
-                  </span>
-                  <span className="text-[10px] text-slate-500 mt-1 font-mono">
-                    {uploadForm.files && uploadForm.files.length > 0
-                      ? formatBytes(uploadForm.files.reduce((acc, f) => acc + f.size, 0))
-                      : "Max total archive size 100MB"}
-                  </span>
-                </div>
-
-                {uploadForm.files && uploadForm.files.length > 0 && (
-                  <div className="space-y-4 pt-2">
-                    {/* Collapsible details toggler */}
-                    <button
-                      type="button"
-                      onClick={() => setShowSettings(!showSettings)}
-                      className="flex items-center justify-between w-full text-[10px] uppercase tracking-wider font-semibold text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      <span>Security Upload Configuration</span>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transform transition-transform ${showSettings ? 'rotate-180' : ''}`}><path d="M6 9l6 6 6-6" /></svg>
-                    </button>
-
-                    {showSettings && (
-                      <div className="space-y-4 p-3 bg-slate-950/40 rounded-xl border border-slate-900 animate-slideDown">
-                        {/* Burn Limit Toggle */}
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-400 font-medium">Burn after download</span>
-                          <button
-                            type="button"
-                            onClick={() => setUploadForm(prev => ({ ...prev, burnAfterDownload: !prev.burnAfterDownload }))}
-                            className={`relative inline-flex h-4.5 w-8.5 items-center rounded-full transition-colors duration-300 focus:outline-none ${uploadForm.burnAfterDownload ? 'bg-orange-500/80' : 'bg-slate-800'}`}
-                          >
-                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 ${uploadForm.burnAfterDownload ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
-                          </button>
-                        </div>
-
-                        {/* Password input */}
-                        <div className="space-y-1 text-left">
-                          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Access Password</label>
-                          <input
-                            type="password"
-                            value={uploadForm.password}
-                            onChange={(e) => setUploadForm(prev => ({ ...prev, password: e.target.value }))}
-                            placeholder="Optional lock password"
-                            className="w-full bg-slate-950 border border-slate-900 focus:border-indigo-500/40 rounded-lg py-2 px-3 text-xs outline-none text-slate-200 placeholder:text-slate-700 font-mono"
-                          />
-                        </div>
-
-                        {/* Expiration dropdown */}
-                        <div className="space-y-1 text-left">
-                          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Auto-Destroy Expiration</label>
-                          <select
-                            value={uploadForm.expiresIn}
-                            onChange={(e) => setUploadForm(prev => ({ ...prev, expiresIn: e.target.value }))}
-                            className="w-full bg-slate-950 border border-slate-900 focus:border-indigo-500/40 rounded-lg p-2 text-xs outline-none text-slate-400 cursor-pointer"
-                          >
-                            <option value="5">5 Minutes</option>
-                            <option value="20">20 Minutes</option>
-                            <option value="60">1 Hour</option>
-                          </select>
-                        </div>
-
-                        {/* Max downloads */}
-                        {!uploadForm.burnAfterDownload && (
-                          <div className="space-y-1 text-left">
-                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Max download limit</label>
-                            <input
-                              type="number"
-                              value={uploadForm.maxDownloads}
-                              onChange={(e) => setUploadForm(prev => ({ ...prev, maxDownloads: e.target.value }))}
-                              placeholder="e.g. 5 (Optional)"
-                              min="1"
-                              className="w-full bg-slate-950 border border-slate-900 focus:border-indigo-500/40 rounded-lg py-2 px-3 text-xs outline-none text-slate-200 placeholder:text-slate-700"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Stash submission CTA */}
-                    <button
-                      type="submit"
-                      disabled={status.isUploading}
-                      className="w-full bg-white hover:bg-slate-200 text-slate-950 rounded-xl py-2.5 text-xs font-bold transition-all disabled:opacity-50"
-                    >
-                      {status.isUploading ? "Uploading archive..." : uploadForm.burnAfterDownload ? "Stash & Burn" : "Stash Archive"}
-                    </button>
-                  </div>
-                )}
-              </form>
-
-              {/* Shared Files list feed */}
-              <div className="space-y-4">
-                {room.files.length === 0 ? (
-                  <div className="py-20 text-center text-slate-600">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 text-slate-800"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-                    <p className="text-xs font-semibold">Feed is empty</p>
-                    <p className="text-[10px] text-slate-700 mt-1">Files uploaded in this room will list here in real-time.</p>
-                  </div>
-                ) : (
-                  room.files.map((file) => (
-                    <FileCard
-                      key={file.id}
-                      file={file}
-                      isOwner={isOwner(file.id)}
-                      downloadProgress={downloadProgress}
-                      onDownload={handleDownloadInitiation}
-                      onDelete={deleteFile}
-                      onQr={setActiveQrFile}
-                      fetchPreviewUrl={fetchPreviewUrl}
-                      refreshFiles={refreshFiles}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* B. Clipboard sync viewport */}
-          {activeMode === 'clipboard' && (
-            <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-5 space-y-4 animate-scaleUp">
-              <form onSubmit={handleClipboardSend} className="flex items-center space-x-2">
-                <input
-                  type="text"
-                  value={clipboardText}
-                  onChange={(e) => setClipboardText(e.target.value)}
-                  placeholder="Paste a code snippet, link or text to sync..."
-                  className="flex-grow bg-slate-950 border border-slate-900 focus:border-indigo-500/40 rounded-xl py-2.5 px-4 text-xs outline-none text-slate-200 placeholder:text-slate-700"
-                />
-                <button
-                  type="submit"
-                  disabled={!clipboardText.trim()}
-                  className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 hover:bg-indigo-500/20 text-indigo-400 rounded-xl active:scale-95 transition-all disabled:opacity-30"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
-                </button>
-              </form>
-
-              {clipboard.length === 0 ? (
-                <div className="py-12 text-center text-slate-600">
-                  <p className="text-xs">No clipboard clips shared yet.</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                  {clipboard.slice().reverse().map((item, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start justify-between text-xs p-3 rounded-xl border transition-all ${item.fromRemote ? 'bg-indigo-500/5 border-indigo-500/15 text-indigo-300' : 'bg-slate-950/40 border-slate-900 text-slate-400'}`}
-                    >
-                      <span className="break-all font-mono leading-relaxed select-all cursor-text text-left flex-grow">{item.text}</span>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(item.text)}
-                        className="ml-3 p-1 hover:bg-slate-900 rounded text-slate-600 hover:text-slate-300 transition-colors flex-shrink-0"
-                        title="Copy clip"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* C. Voice Drop viewport */}
-          {activeMode === 'voice' && (
-            <div className="animate-scaleUp">
-              <VoiceRecorder
-                onUpload={uploadFile}
-                isUploading={status.isUploading}
-              />
-            </div>
-          )}
-
-          {/* D. Screen Share viewport */}
-          {activeMode === 'screen' && (
-            <div className="animate-scaleUp">
-              <ScreenShare
-                isSharing={screenShare.isSharing}
-                stream={screenShare.stream}
-                remoteStream={screenShare.remoteStream}
-                onStart={startScreenShare}
-                onStop={stopScreenShare}
-              />
-            </div>
-          )}
-
-        </main>
-
-        {/* Bottom Switcher Navigation Bar */}
-        <ActionBar
+    <SidebarProvider>
+      <div className="flex h-screen w-screen overflow-hidden bg-[#07070a] text-slate-200 font-sans selection:bg-indigo-500/30">
+        <Sidebar 
+          myRooms={myRooms}
+          joinedRooms={joinedRooms}
+          currentRoomId={room.id}
+          setRoomId={setRoomId}
+          createRoom={createRoom}
+          deleteRoom={(id) => setDeleteTargetRoomId(id)}
+          leaveRoom={(id) => setLeaveTargetRoomId(id)}
+          onOpenJoinModal={() => setShowJoinModal(true)}
+          fetchDefaultRoom={fetchDefaultRoom}
           activeMode={activeMode}
           onChangeMode={setActiveMode}
           roomFileCount={room.files.length}
           clipboardCount={clipboard.length}
+          onOpenShareForRoom={handleOpenShareForRoom}
         />
+        
+        <div className="flex-grow flex flex-col relative h-full overflow-y-auto">
+          {gate && gate.isGate ? (
+            <GateScreen 
+              gate={gate} 
+              joinRoomWithKey={joinRoomWithKey} 
+              requestAccessAcceptOnly={requestAccessAcceptOnly} 
+              fetchRoomDetails={fetchRoomDetails} 
+            />
+          ) : (
+            <div className="pb-32 pt-6 px-4">
+              <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* 5. Password modal overlay */}
-        {unlockingFile && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-            <div className="w-full max-w-xs bg-slate-900 border border-slate-850 rounded-2xl p-5 shadow-2xl space-y-4 animate-scaleUp">
-              <div className="flex items-center space-x-2 text-amber-500 border-b border-slate-850 pb-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="animate-bounce"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-                <h3 className="text-sm font-bold">Unlocking File</h3>
-              </div>
+                {/* Notion-style Page Header */}
+                <header className="flex items-center justify-between border-b border-slate-900 pb-4 mb-6 text-left animate-fadeIn">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-2xl font-bold text-white tracking-tight">{room.name || 'stash:default'}</h1>
+                      {room.id && room.id !== 'undefined' && (
+                        <button
+                          onClick={() => {
+                            setEditName(room.name || '');
+                            setEditDescription(room.description || '');
+                            setShowEditModal(true);
+                          }}
+                          className="text-slate-500 hover:text-slate-200 transition-colors p-1"
+                          title="Edit Room Info"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {room.description && (
+                      <p className="text-xs text-slate-500 mt-1">{room.description}</p>
+                    )}
+                  </div>
 
-              <p className="text-[10px] text-slate-500 text-left leading-normal">
-                This file <span className="font-semibold text-slate-300 font-mono">{unlockingFile.filename}</span> is protected. Enter the decryption password.
-              </p>
+                  <div className="flex items-center space-x-3 bg-slate-950/60 border border-slate-900 rounded-xl px-3 py-1.5 shadow-sm">
+                    <button
+                      onClick={() => setShowShareModal(true)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                      title="Share Room & Access Settings"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
 
-              {downloadError && (
-                <div className="bg-red-950/40 border border-red-500/20 text-red-400 rounded-lg p-2.5 text-[10px] text-left">
-                  {downloadError}
-                </div>
-              )}
+                    {isRoomHost && room.id && room.id !== 'undefined' && (
+                      <button
+                        onClick={() => setDeleteTargetRoomId(room.id)}
+                        className="p-1.5 rounded-lg text-red-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        title="Delete Room"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
 
-              <input
-                type="password"
-                value={unlockPassword}
-                onChange={(e) => setUnlockPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleUnlockSubmit()}
-                placeholder="Password"
-                autoFocus
-                className="w-full bg-slate-950 border border-slate-900 focus:border-amber-500/50 rounded-lg py-2 px-3 text-xs outline-none text-slate-200 placeholder:text-slate-700 font-mono"
-              />
+                    <button
+                      onClick={refreshFiles}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-slate-200 transition-colors cursor-pointer"
+                      title="Refresh feed"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </header>
 
-              <div className="flex items-center space-x-2 pt-1 text-xs">
-                <button
-                  onClick={() => setUnlockingFile(null)}
-                  className="flex-1 bg-slate-950 hover:bg-slate-900 text-slate-400 py-2 rounded-xl font-semibold border border-slate-900"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleUnlockSubmit}
-                  className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-xl font-semibold"
-                >
-                  Unlock
-                </button>
+                {/* Global errors banner */}
+                {status.error && (
+                  <div className="bg-red-950/20 border border-red-500/20 text-red-400 rounded-xl p-3 flex items-center space-x-2 text-xs">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{status.error}</span>
+                  </div>
+                )}
+
+                {/* ==========================================
+                    Interactive Content Feeds Switcher
+                    ========================================== */}
+                <main className="space-y-6">
+
+                  {/* A. Files Mode viewport */}
+                  {activeMode === 'files' && (
+                    <div className="space-y-6">
+                      <UploadForm 
+                        uploadFile={uploadFile} 
+                        isUploading={status.isUploading} 
+                      />
+                      <FileListFeed 
+                        room={room}
+                        downloadProgress={downloadProgress}
+                        onDownload={handleDownloadInitiation}
+                        onDelete={deleteFile}
+                        onQr={setActiveQrFile}
+                        fetchPreviewUrl={fetchPreviewUrl}
+                        refreshFiles={refreshFiles}
+                      />
+                    </div>
+                  )}
+
+                  {/* B. Clipboard sync viewport */}
+                  {activeMode === 'clipboard' && (
+                    <ClipboardFeed 
+                      clipboard={clipboard}
+                      sendClipboard={sendClipboard}
+                    />
+                  )}
+
+                  {/* C. Voice Drop viewport */}
+                  {activeMode === 'voice' && (
+                    <div className="animate-scaleUp">
+                      <VoiceRecorder
+                        onUpload={uploadFile}
+                        isUploading={status.isUploading}
+                      />
+                    </div>
+                  )}
+
+                  {/* D. Screen Share viewport */}
+                  {activeMode === 'screen' && (
+                    <div className="animate-scaleUp">
+                      <ScreenShare
+                        isSharing={screenShare.isSharing}
+                        stream={screenShare.stream}
+                        remoteStream={screenShare.remoteStream}
+                        onStart={startScreenShare}
+                        onStop={stopScreenShare}
+                      />
+                    </div>
+                  )}
+
+                </main>
+
+                {/* File Password unlock modal */}
+                <Dialog open={!!unlockingFile} onOpenChange={() => setUnlockingFile(null)}>
+                  <DialogContent className="bg-[#111115] border-slate-900 max-w-xs text-slate-200">
+                    <DialogHeader>
+                      <DialogTitle className="text-sm font-bold flex items-center gap-2 text-amber-500">
+                        <Lock className="w-4 h-4 text-amber-500" />
+                        Unlocking File
+                      </DialogTitle>
+                      <DialogDescription className="text-[10px] text-slate-500 leading-normal">
+                        This file <span className="font-semibold text-slate-300 font-mono">{unlockingFile?.filename}</span> is protected. Enter the decryption password.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {downloadError && (
+                      <div className="bg-red-950/40 border border-red-500/20 text-red-400 rounded-lg p-2.5 text-[10px] text-left">
+                        {downloadError}
+                      </div>
+                    )}
+
+                    <Input
+                      type="password"
+                      value={unlockPassword}
+                      onChange={(e) => setUnlockPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleUnlockSubmit()}
+                      placeholder="Password"
+                      autoFocus
+                      className="bg-slate-950 border-slate-900 text-xs focus:ring-amber-500/50"
+                    />
+
+                    <DialogFooter className="flex items-center space-x-2 pt-1">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setUnlockingFile(null)}
+                        className="flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-900 text-slate-400 text-xs font-semibold cursor-pointer"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleUnlockSubmit}
+                        className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
+                      >
+                        Unlock
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* QR Code popover modal */}
+                <Dialog open={!!activeQrFile} onOpenChange={() => setActiveQrFile(null)}>
+                  <DialogContent className="bg-[#111115] border-slate-900 max-w-xs text-slate-200 text-center">
+                    <DialogHeader className="flex flex-col items-center text-center">
+                      <QrCode className="w-5 h-5 text-indigo-400 mb-1" />
+                      <DialogTitle className="text-sm font-bold">Scan to Download</DialogTitle>
+                      <DialogDescription className="text-[10px] text-slate-500 max-w-xs px-2 leading-normal">
+                        Point any phone camera to download <span className="font-semibold text-slate-300 font-mono">{activeQrFile?.filename}</span> directly.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {activeQrFile && (
+                      <div className="bg-slate-950 p-3.5 border border-slate-850 rounded-xl inline-block shadow-inner mx-auto my-2">
+                        <img
+                          src={getQrCodeUrl(activeQrFile.id)}
+                          alt="QR code"
+                          className="w-40 h-40 rounded-lg"
+                        />
+                      </div>
+                    )}
+
+                    <div className="text-[9px] font-mono text-slate-600 truncate max-w-xs mx-auto select-all">
+                      {activeQrFile && `${window.location.origin}?download=${activeQrFile.id}`}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* 6. QR Code popover modal */}
-        {activeQrFile && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-            <div className="w-full max-w-xs bg-slate-900 border border-slate-850 rounded-2xl p-5 shadow-2xl text-center relative animate-scaleUp">
-              <button
-                onClick={() => setActiveQrFile(null)}
-                className="absolute top-4 right-4 p-1 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-slate-200 transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-              </button>
+        {/* Modals & Popovers */}
 
-              <div className="flex flex-col items-center space-y-1.5 mb-4">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-indigo-400"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="3" height="3" /><path d="M21 14h-3v3h3v4h-4v-4" /></svg>
-                <h3 className="text-sm font-bold">Scan to Download</h3>
-                <p className="text-[10px] text-slate-500 max-w-xs px-2 leading-normal">
-                  Point any phone camera to download <span className="font-semibold text-slate-300 font-mono">{activeQrFile.filename}</span> directly.
-                </p>
-              </div>
-
-              <div className="bg-slate-950 p-3.5 border border-slate-850 rounded-xl inline-block shadow-inner mb-3">
-                <img
-                  src={getQrCodeUrl(activeQrFile.id)}
-                  alt="QR code"
-                  className="w-40 h-40 rounded-lg"
+        {/* 1. Join Room Modal */}
+        <Dialog open={showJoinModal} onOpenChange={setShowJoinModal}>
+          <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-white">Join Room Manually</DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Enter the exact Room ID to sync and access its feed files.
+              </DialogDescription>
+            </DialogHeader>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!joinRoomId.trim()) return toast.error("Room ID is required");
+                setShowJoinModal(false);
+                setRoomId(joinRoomId.trim());
+                setJoinRoomId("");
+              }}
+              className="space-y-4 text-xs text-slate-300"
+            >
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room ID</label>
+                <Input 
+                  type="text" 
+                  autoFocus
+                  placeholder="Enter Room ID"
+                  value={joinRoomId}
+                  onChange={(e) => setJoinRoomId(e.target.value)}
+                  className="bg-slate-950 border-slate-900 text-xs focus:ring-indigo-500"
                 />
               </div>
+              <DialogFooter className="flex justify-end space-x-3 pt-2">
+                <Button 
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowJoinModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Join
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
-              <div className="text-[9px] font-mono text-slate-600 truncate max-w-xs mx-auto select-all">
-                {`${window.location.origin}?download=${activeQrFile.id}`}
+        {/* 2. Edit Room Info Modal */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-white">Edit Room Info</DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Change the room name and workspace descriptions shown to guests.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditRoomSubmit} className="space-y-4 text-xs text-slate-300">
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room Name</label>
+                <Input 
+                  type="text" 
+                  autoFocus
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="bg-slate-950 border-slate-900 text-xs focus:ring-indigo-500"
+                />
               </div>
-            </div>
-          </div>
-        )}
-      </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Description</label>
+                <Textarea 
+                  rows={2}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="bg-slate-950 border-slate-900 text-xs focus:ring-indigo-500 resize-none"
+                />
+              </div>
+              <DialogFooter className="flex justify-end space-x-3 pt-2">
+                <Button 
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowEditModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
-      <SettingsDrawer 
-        room={room} 
-        updateRoomSettings={updateRoomSettings} 
-        rotateStackKey={rotateStackKey} 
-        approveGuest={approveGuest} 
-        denyGuest={denyGuest} 
-        isOpen={showSettings} 
-        onClose={() => setShowSettings(false)} 
-      />
-    </div>
+        {/* 3. Share Room & Security Settings Modal */}
+        <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+          <DialogContent className="bg-[#111115] border-slate-900 text-slate-200 max-h-[90vh] overflow-y-auto pr-2">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-white flex items-center gap-2">
+                <Share2 className="w-4 h-4 text-indigo-400" />
+                Share Room & Security Settings
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Generate invite options, QR scans, and protect access permissions.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-5 text-xs text-slate-300">
+              
+              {/* Dynamic QR code section */}
+              <div className="flex flex-col items-center space-y-2 bg-slate-950/40 border border-slate-900 rounded-2xl p-4 shadow-inner">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=6366f1&bgcolor=0f172a&data=${encodeURIComponent(`${window.location.origin}/rooms/${room.id}`)}`}
+                  alt="Room QR Code"
+                  className="w-36 h-36 rounded-lg"
+                />
+                <span className="text-[10px] text-slate-500 font-medium">Scan QR to join room instantly</span>
+              </div>
+
+              {/* Share Link trigger */}
+              <Button 
+                onClick={handleNativeShare}
+                className="w-full font-semibold cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share Link
+              </Button>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Invite Link</label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="text" 
+                    readOnly 
+                    value={`${window.location.origin}/rooms/${room.id}`}
+                    className="flex-grow bg-slate-950 border-slate-900 text-[11px]"
+                  />
+                  <Button 
+                    onClick={handleCopyInviteLink}
+                    className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-semibold cursor-pointer shrink-0"
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room ID</label>
+                <div className="flex gap-2">
+                  <Input 
+                    type="text" 
+                    readOnly 
+                    value={room.id}
+                    className="flex-grow bg-slate-950 border-slate-900 text-[11px] font-mono"
+                  />
+                  <Button 
+                    onClick={handleCopyRoomId}
+                    className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-semibold cursor-pointer shrink-0"
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </div>
+
+              {isRoomHost && (
+                <div className="border-t border-slate-900 pt-4 space-y-4">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-left">Host Security Controls</label>
+                  
+                  {/* Private Room (Stash Key) Checkbox */}
+                  <div className="space-y-3 border border-slate-900 bg-slate-950/20 p-3 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs text-slate-200 font-semibold">Private Room (Stash Key)</span>
+                        <span className="text-[10px] text-slate-500">Require guests to input a rotating Stash Key</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={!!room.is_protected}
+                        onChange={async (e) => {
+                          const checked = e.target.checked;
+                          const res = await updateRoomSettings(room.id, { is_protected: checked });
+                          if (res.success) {
+                            toast.success(checked ? "Room set to Private" : "Private access disabled");
+                          } else {
+                            toast.error("Failed to update Private status");
+                          }
+                        }}
+                        className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+                      />
+                    </div>
+                    {room.is_protected && (
+                      <div className="bg-[#1C1C22] border border-slate-800 rounded-xl p-3 space-y-2 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400 font-medium">Stash Key Pin</span>
+                          <span className="text-[11px] font-mono font-bold text-indigo-400 tracking-widest bg-indigo-500/10 px-2 py-0.5 rounded">
+                            {room.stack_key || "------"}
+                          </span>
+                        </div>
+                        <Button 
+                          onClick={handleRotateKey}
+                          className="w-full bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-semibold cursor-pointer h-7"
+                        >
+                          Rotate Stack Key
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manual Approval (Accept Only) Checkbox */}
+                  <div className="space-y-3 border border-slate-900 bg-slate-950/20 p-3 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col text-left">
+                        <span className="text-xs text-slate-200 font-semibold">Manual Approval (Accept Only)</span>
+                        <span className="text-[10px] text-slate-500">Require host to approve each join request</span>
+                      </div>
+                      <input 
+                        type="checkbox" 
+                        checked={!!room.accept_only}
+                        onChange={async (e) => {
+                          const checked = e.target.checked;
+                          const res = await updateRoomSettings(room.id, { accept_only: checked });
+                          if (res.success) {
+                            toast.success(checked ? "Manual approval enabled" : "Manual approval disabled");
+                          } else {
+                            toast.error("Failed to update approval mode");
+                          }
+                        }}
+                        className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+                      />
+                    </div>
+                    {room.accept_only && requests.length > 0 && (
+                      <div className="bg-[#1C1C22] border border-slate-850 rounded-xl p-3 space-y-2 text-left">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                          Access Requests
+                          <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{requests.length}</span>
+                        </span>
+                        <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                          {requests.map((req) => (
+                            <li key={req.clientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-950/40 rounded-lg">
+                              <div className="flex flex-col truncate pr-2">
+                                <span className="font-semibold text-slate-300 truncate">{req.guestName}</span>
+                                <span className="text-[9px] text-slate-500 font-mono truncate">{req.clientId.substring(0, 10)}...</span>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Button
+                                  size="xs"
+                                  onClick={() => handleApprove(req.clientId, req.guestSocketId)}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
+                                >
+                                  Allow
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="destructive"
+                                  onClick={() => handleDeny(req.clientId, req.guestSocketId)}
+                                  className="text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
+                                >
+                                  Deny
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* 4. Custom Delete Room Modal */}
+        <Dialog open={!!deleteTargetRoomId} onOpenChange={() => setDeleteTargetRoomId(null)}>
+          <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-white">Delete Room</DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Are you sure you want to delete this room? This action is permanent and will immediately delete all files from storage.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex justify-end space-x-3 pt-2">
+              <Button 
+                variant="secondary"
+                onClick={() => setDeleteTargetRoomId(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive"
+                onClick={async () => {
+                  const res = await deleteRoomHook(deleteTargetRoomId);
+                  setDeleteTargetRoomId(null);
+                  if (res && res.success) {
+                    toast.success("Room deleted successfully");
+                  }
+                }}
+                className="text-white text-xs font-semibold cursor-pointer"
+              >
+                Yes, Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* 5. Custom Leave Room Modal */}
+        <Dialog open={!!leaveTargetRoomId} onOpenChange={() => setLeaveTargetRoomId(null)}>
+          <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-bold text-white">Leave Room</DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Are you sure you want to leave this room? It will be removed from your sidebar list but the room itself will continue to exist.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex justify-end space-x-3 pt-2">
+              <Button 
+                variant="secondary"
+                onClick={() => setLeaveTargetRoomId(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={async () => {
+                  leaveRoomHook(leaveTargetRoomId);
+                  setLeaveTargetRoomId(null);
+                  toast.success("Left room successfully");
+                }}
+                className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-semibold cursor-pointer"
+              >
+                Yes, Leave
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Sonner Toast Provider */}
+        <Toaster position="top-right" richColors closeButton />
+      </div>
+    </SidebarProvider>
   );
 }
 
