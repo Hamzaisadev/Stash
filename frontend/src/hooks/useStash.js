@@ -441,6 +441,9 @@ export function useStash() {
                     }
                     return prev;
                 });
+
+                // Fetch files for the room now that we are successfully authorized
+                fetchRoomFiles(roomInfo.id);
                 
                 return { success: true, room: roomInfo };
             }
@@ -523,7 +526,7 @@ export function useStash() {
             const json = await res.json();
             if (json.status === 'success') {
                 const tokens = JSON.parse(localStorage.getItem('stash_room_tokens') || '{}');
-                tokens[roomId] = json.token;
+                tokens[roomId] = json.data.token;
                 localStorage.setItem('stash_room_tokens', JSON.stringify(tokens));
                 
                 setJoinedRooms(prev => [...prev.filter(r => r.id !== roomId), { id: roomId }]);

@@ -734,6 +734,16 @@ export const getRoomDetails = async (req, res, next) => {
         const token = req.headers['x-room-access-token'] || req.query.token;
         const isAuthorized = isHost || (token && verifyRoomToken(token, room_id));
 
+        if ((room.is_protected || room.accept_only) && !isHost && !isAuthorized) {
+            return res.status(403).json({
+                status: 'forbidden',
+                message: 'Access denied. Security key or approval required.',
+                require_password: room.is_protected && !!room.stack_key,
+                accept_only: room.accept_only,
+                room_id: room.id
+            });
+        }
+
         const responseData = {
             id: room.id,
             name: room.name,
@@ -765,8 +775,9 @@ export const getRoomDetails = async (req, res, next) => {
 export const joinRoom = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const { stack_key } = req.body;
+        const { stack_key, password } = req.body;
         const client_id = req.headers['x-host-id'] || req.body.client_id;
+        const inputKey = stack_key || password;
 
         if (!client_id) {
             return next(new AppError('Client identity is required to join a room.', 400));
@@ -791,7 +802,7 @@ export const joinRoom = async (req, res, next) => {
             if (room.stack_key_expires_at < Date.now()) {
                 return next(new AppError('Access code has expired. Please try with a fresh code.', 400));
             }
-            if (room.stack_key !== stack_key) {
+            if (room.stack_key !== inputKey) {
                 return next(new AppError('Incorrect access code.', 403));
             }
         }
