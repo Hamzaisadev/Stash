@@ -512,8 +512,20 @@ export const getPreview = async (req, res, next) => {
         if (error) throw error;
         if (!file) return next(new AppError('File not found.', 404));
 
-        // Only allow previews for images, videos, and audios
-        if (!file.mime_type.startsWith('image/') && !file.mime_type.startsWith('video/') && !file.mime_type.startsWith('audio/')) {
+        // Extract file extension as fallback for mobile uploads with generic MIME types
+        const extension = path.extname(file.file_path).toLowerCase().substring(1);
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'svg', 'bmp'];
+        const videoExtensions = ['mp4', 'mov', 'webm', 'ogg', 'mkv', 'avi', 'm4v'];
+        const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'];
+
+        const isPreviewable = file.mime_type.startsWith('image/') || 
+                              file.mime_type.startsWith('video/') || 
+                              file.mime_type.startsWith('audio/') ||
+                              imageExtensions.includes(extension) ||
+                              videoExtensions.includes(extension) ||
+                              audioExtensions.includes(extension);
+
+        if (!isPreviewable) {
             return next(new AppError('Preview not available for this file type.', 400));
         }
 

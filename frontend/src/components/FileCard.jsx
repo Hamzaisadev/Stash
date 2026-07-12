@@ -1,11 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 
+// Helper function to resolve media types based on MIME type AND file extension fallbacks.
+// This is critical for mobile browsers which often upload files with generic mime types.
+const getMediaType = (filename, mimeType) => {
+  const mime = mimeType?.toLowerCase() || '';
+  const ext = filename?.split('.').pop()?.toLowerCase() || '';
+  
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif', 'svg', 'bmp'];
+  const videoExtensions = ['mp4', 'mov', 'webm', 'ogg', 'mkv', 'avi', 'm4v'];
+  const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'];
+  
+  const isVoiceNote = Boolean(filename?.startsWith('voice-drop-'));
+
+  if (mime.startsWith('image/') || imageExtensions.includes(ext)) {
+    return { isImage: true, isVideo: false, isAudio: false, isMedia: true, isVoiceNote };
+  }
+  if (mime.startsWith('video/') || videoExtensions.includes(ext)) {
+    // If it's a voice-drop file, treat it as audio
+    if (isVoiceNote) {
+      return { isImage: false, isVideo: false, isAudio: true, isMedia: true, isVoiceNote };
+    }
+    return { isImage: false, isVideo: true, isAudio: false, isMedia: true, isVoiceNote };
+  }
+  if (mime.startsWith('audio/') || audioExtensions.includes(ext) || isVoiceNote) {
+    return { isImage: false, isVideo: false, isAudio: true, isMedia: true, isVoiceNote };
+  }
+  return { isImage: false, isVideo: false, isAudio: false, isMedia: false, isVoiceNote };
+};
+
 // ─── File Card ────────────────────────────────────────────────────────────────
 function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr, fetchPreviewUrl, refreshFiles }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
   const [showZoomModal, setShowZoomModal] = useState(false);
+
+  // Deleting loading state
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Audio/Player specific states
   const [isPlaying, setIsPlaying] = useState(false);
@@ -15,12 +46,8 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
   const [duration, setDuration] = useState('--:--');
   const audioRef = useRef(null);
 
-  // Voice-drop webm files: treat as audio even though MIME is video/webm
-  const isVoiceNote = Boolean(file.filename?.startsWith('voice-drop-'));
-  const isImage = file.mime_type?.startsWith('image/');
-  const isVideo = file.mime_type?.startsWith('video/') && !isVoiceNote;
-  const isAudio = file.mime_type?.startsWith('audio/') || isVoiceNote;
-  const isMedia = isImage || isVideo || isAudio;
+  // Resolve media details using extension fallback helper
+  const { isImage, isVideo, isAudio, isMedia, isVoiceNote } = getMediaType(file.filename, file.mime_type);
 
   const downloadProgressEntry = downloadProgress?.[file.id];
 
@@ -75,7 +102,6 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
   const togglePlay = async () => {
     const audio = audioRef.current;
     if (previewLoading || !previewUrl) {
-      // Toggle play request state while loading the URL
       setPlayRequested(prev => !prev);
       return;
     }
@@ -139,6 +165,17 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  // Perform delete action and handle loading state
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDelete(file.id);
+    } catch (e) {
+      console.error("Delete failed:", e);
+    }
+    setIsDeleting(false);
   };
 
   // ─── 1. Specialized Audio/Voice Note Layout (Single Integrated Row) ───
@@ -218,13 +255,20 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
         {isOwner && (
           <div className="flex-shrink-0 self-center">
             <button
-              onClick={() => onDelete(file.id)}
-              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer disabled:opacity-50"
               title="Delete"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-              </svg>
+              {isDeleting ? (
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+              )}
             </button>
           </div>
         )}
@@ -324,13 +368,20 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
         <div className="flex items-center gap-2 flex-shrink-0">
           {isOwner && (
             <button
-              onClick={() => onDelete(file.id)}
-              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer disabled:opacity-50"
               title="Delete"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-              </svg>
+              {isDeleting ? (
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 12a9 9 0 1 1-6.22-8.56" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+              )}
             </button>
           )}
 
