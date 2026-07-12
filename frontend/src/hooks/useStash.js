@@ -590,8 +590,13 @@ export function useStash() {
             });
             const json = await res.json();
             if (json.status === 'success') {
-                setRoom(prev => ({ ...prev, stack_key: json.stack_key }));
-                return { success: true, stack_key: json.stack_key };
+                const updatedRoom = json.data.room;
+                setRoom(prev => ({ 
+                    ...prev, 
+                    stack_key: updatedRoom.stack_key,
+                    stack_key_expires_at: updatedRoom.stack_key_expires_at
+                }));
+                return { success: true, stack_key: updatedRoom.stack_key };
             }
             throw new Error(json.message);
         } catch (err) {
