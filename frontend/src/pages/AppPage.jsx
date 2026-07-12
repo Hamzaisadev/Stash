@@ -94,7 +94,10 @@ function AppPage() {
   const [requests, setRequests] = useState([]);
 
   const [deleteTargetRoomId, setDeleteTargetRoomId] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [leaveTargetRoomId, setLeaveTargetRoomId] = useState(null);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const [unlockingFile, setUnlockingFile] = useState(null);
   const [unlockPassword, setUnlockPassword] = useState("");
@@ -201,12 +204,12 @@ function AppPage() {
   const handleEditRoomSubmit = async (e) => {
     e.preventDefault();
     if (!editName.trim()) return toast.error("Room name is required");
-
+    setIsSavingEdit(true);
     const res = await updateRoomSettings(room.id, {
       name: editName.trim(),
       description: editDescription.trim()
     });
-
+    setIsSavingEdit(false);
     if (res.success) {
       toast.success("Room details updated successfully!");
       setShowEditModal(false);
@@ -560,6 +563,7 @@ function AppPage() {
                 <Button 
                   type="button"
                   variant="secondary"
+                  disabled={isSavingEdit}
                   onClick={() => setShowEditModal(false)}
                   className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
                 >
@@ -567,9 +571,15 @@ function AppPage() {
                 </Button>
                 <Button 
                   type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer"
+                  disabled={isSavingEdit}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer min-w-[100px]"
                 >
-                  Save Changes
+                  {isSavingEdit ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </span>
+                  ) : 'Save Changes'}
                 </Button>
               </DialogFooter>
             </form>
@@ -755,7 +765,7 @@ function AppPage() {
         </Dialog>
 
         {/* 4. Custom Delete Room Modal */}
-        <Dialog open={!!deleteTargetRoomId} onOpenChange={() => setDeleteTargetRoomId(null)}>
+        <Dialog open={!!deleteTargetRoomId} onOpenChange={(open) => { if (!isDeleting) setDeleteTargetRoomId(open ? deleteTargetRoomId : null); }}>
           <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-sm font-bold text-white">Delete Room</DialogTitle>
@@ -766,6 +776,7 @@ function AppPage() {
             <DialogFooter className="flex justify-end space-x-3 pt-2">
               <Button 
                 variant="secondary"
+                disabled={isDeleting}
                 onClick={() => setDeleteTargetRoomId(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
               >
@@ -773,23 +784,33 @@ function AppPage() {
               </Button>
               <Button 
                 variant="destructive"
+                disabled={isDeleting}
                 onClick={async () => {
+                  setIsDeleting(true);
                   const res = await deleteRoomHook(deleteTargetRoomId);
+                  setIsDeleting(false);
                   setDeleteTargetRoomId(null);
                   if (res && res.success) {
                     toast.success("Room deleted successfully");
+                  } else {
+                    toast.error("Failed to delete room");
                   }
                 }}
-                className="text-white text-xs font-semibold cursor-pointer"
+                className="text-white text-xs font-semibold cursor-pointer min-w-[90px]"
               >
-                Yes, Delete
+                {isDeleting ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </span>
+                ) : 'Yes, Delete'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* 5. Custom Leave Room Modal */}
-        <Dialog open={!!leaveTargetRoomId} onOpenChange={() => setLeaveTargetRoomId(null)}>
+        <Dialog open={!!leaveTargetRoomId} onOpenChange={(open) => { if (!isLeaving) setLeaveTargetRoomId(open ? leaveTargetRoomId : null); }}>
           <DialogContent className="bg-[#111115] border-slate-900 text-slate-200">
             <DialogHeader>
               <DialogTitle className="text-sm font-bold text-white">Leave Room</DialogTitle>
@@ -800,20 +821,30 @@ function AppPage() {
             <DialogFooter className="flex justify-end space-x-3 pt-2">
               <Button 
                 variant="secondary"
+                disabled={isLeaving}
                 onClick={() => setLeaveTargetRoomId(null)}
                 className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold cursor-pointer"
               >
                 Cancel
               </Button>
               <Button 
+                disabled={isLeaving}
                 onClick={async () => {
+                  setIsLeaving(true);
                   leaveRoomHook(leaveTargetRoomId);
+                  await new Promise(r => setTimeout(r, 400));
+                  setIsLeaving(false);
                   setLeaveTargetRoomId(null);
                   toast.success("Left room successfully");
                 }}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-semibold cursor-pointer"
+                className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-semibold cursor-pointer min-w-[80px]"
               >
-                Yes, Leave
+                {isLeaving ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Leaving...
+                  </span>
+                ) : 'Yes, Leave'}
               </Button>
             </DialogFooter>
           </DialogContent>

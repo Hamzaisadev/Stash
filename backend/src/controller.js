@@ -742,7 +742,8 @@ export const getRoomDetails = async (req, res, next) => {
             accept_only: room.accept_only,
             has_stack_key: !!room.stack_key,
             stack_key_expires_at: room.stack_key_expires_at,
-            created_at: room.created_at
+            created_at: room.created_at,
+            creator_socket_id: room.creator_socket_id
         };
 
         if (isHost || isAuthorized) {

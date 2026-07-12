@@ -100,7 +100,7 @@ export default function UploadForm({ uploadFile, isUploading }) {
       maxDownloads: burnAfterDownload ? "1" : maxDownloads
     });
 
-    if (res.success) {
+    if (res) {
       toast.success("Files stashed successfully!");
       setFiles([]);
       setPassword("");
@@ -110,7 +110,7 @@ export default function UploadForm({ uploadFile, isUploading }) {
       setShowAdvanced(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } else {
-      toast.error(res.error || "Upload failed");
+      toast.error("Upload failed");
     }
   };
 
