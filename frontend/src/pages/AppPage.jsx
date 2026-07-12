@@ -184,7 +184,6 @@ function AppPage() {
           text: `Use Stash to share files, clipboard items, and screens instantly in this private room!`,
           url: inviteLink
         });
-        toast.success("Native share sheet opened!");
       } catch (err) {
         if (err.name !== 'AbortError') {
           toast.error("Failed to trigger native sharing sheet");
@@ -192,7 +191,7 @@ function AppPage() {
       }
     } else {
       navigator.clipboard.writeText(inviteLink);
-      toast.success("Invite link copied! Native sharing not supported on this device.");
+      toast.success("Invite link copied to clipboard!");
     }
   };
 
