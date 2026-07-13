@@ -36,8 +36,8 @@ export const initDatabase = () => {
                     expires_at INTEGER NOT NULL,
                     max_downloads INTEGER,
                     download_count INTEGER DEFAULT 0,
-                    uploaded_at INTEGER NOT NULL
-
+                    uploaded_at INTEGER NOT NULL,
+                    description TEXT
             )
          `, (err) => {
                 if (err) return reject(err)

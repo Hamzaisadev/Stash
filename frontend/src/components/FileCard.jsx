@@ -181,7 +181,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
   // ─── 1. Specialized Audio/Voice Note Layout (Single Integrated Row) ───
   if (isAudio) {
     return (
-      <div className="group animate-fadeUp bg-[#111118] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-white/[0.1] transition-all duration-300 relative p-4 flex items-center gap-4">
+      <div className="group animate-fadeUp bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-red-200 transition-all duration-300 relative p-4 flex items-center gap-4 shadow-sm">
         {/* Hidden audio element */}
         <audio
           ref={audioRef}
@@ -201,8 +201,8 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
             w-10 h-10 rounded-full flex items-center justify-center shrink-0 cursor-pointer
             transition-all duration-150 active:scale-95
             ${showSpinner
-              ? 'bg-indigo-600/30 text-white/50 cursor-wait'
-              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-900/45'
+              ? 'bg-red-500/30 text-white/50 cursor-wait'
+              : 'bg-red-500 hover:bg-red-600 text-white shadow-sm'
             }
           `}
         >
@@ -225,27 +225,27 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
         {/* Content Column */}
         <div className="flex-grow min-w-0 flex flex-col gap-1.5 text-left">
           {/* Filename */}
-          <p className="text-[13px] font-semibold text-white truncate" title={file.filename}>
+          <p className="text-[13px] font-semibold text-slate-800 truncate" title={file.filename}>
             {file.filename}
           </p>
 
           {/* Inline Seekbar */}
           <div
             onClick={showSpinner ? undefined : seekTo}
-            className={`h-1.5 bg-slate-800 rounded-full relative overflow-hidden group/bar ${showSpinner ? 'cursor-default' : 'cursor-pointer'}`}
+            className={`h-1.5 bg-slate-100 rounded-full relative overflow-hidden group/bar ${showSpinner ? 'cursor-default' : 'cursor-pointer'}`}
           >
             <div
-              className="h-full bg-indigo-500 transition-all duration-100 rounded-full group-hover/bar:bg-indigo-400"
+              className="h-full bg-red-500 transition-all duration-100 rounded-full group-hover/bar:bg-red-400"
               style={{ width: `${progress}%` }}
             />
           </div>
 
           {/* Status Line */}
-          <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium font-sans select-none">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium font-sans select-none">
             <div className="flex items-center gap-3">
               <span>{formatBytes(file.file_size)}</span>
-              <span className="text-[#6366f1] font-mono animate-pulse-soft">{timeLeft}</span>
-              {file.is_locked && <span className="text-amber-500">Locked</span>}
+              <span className="text-red-500 font-mono animate-pulse-soft">{timeLeft}</span>
+              {file.is_locked && <span className="text-amber-600">Locked</span>}
             </div>
             <span className="font-mono text-[9px] text-slate-400">{currentTime} / {duration}</span>
           </div>
@@ -257,7 +257,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
             <button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer disabled:opacity-50"
+              className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all cursor-pointer disabled:opacity-50"
               title="Delete"
             >
               {isDeleting ? (
@@ -278,22 +278,22 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
 
   // ─── 2. Standard Layout (Images, Videos, Documents) ───
   return (
-    <div className="group animate-fadeUp bg-[#111118] border border-white/[0.06] rounded-2xl overflow-hidden hover:border-white/[0.1] transition-all duration-300 relative">
+    <div className="group animate-fadeUp bg-white border border-slate-200 rounded-2xl overflow-hidden hover:border-red-200 transition-all duration-300 relative shadow-sm">
 
       {/* Image Preview */}
       {isImage && previewUrl && (
         <div
           onClick={() => setShowZoomModal(true)}
-          className="w-full bg-black/40 overflow-hidden relative cursor-pointer"
+          className="w-full bg-slate-50 overflow-hidden relative cursor-zoom-in border-b border-slate-100"
         >
           <img
             src={previewUrl}
             alt={file.filename}
-            className="w-full max-h-80 object-contain transition-transform duration-500 group-hover:scale-[1.03]"
+            className="w-full max-h-80 object-contain transition-transform duration-500 group-hover:scale-[1.02]"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <div className="bg-slate-950/80 text-white rounded-full p-2.5 shadow-lg backdrop-blur-sm hover:scale-110 transition-transform">
+          <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <div className="bg-white/90 border border-slate-200 text-slate-700 rounded-full p-2.5 shadow-lg backdrop-blur-sm hover:scale-110 transition-transform">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -305,7 +305,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
 
       {/* Video Preview */}
       {isVideo && previewUrl && (
-        <div className="w-full bg-black overflow-hidden relative">
+        <div className="w-full bg-slate-50 overflow-hidden relative border-b border-slate-100">
           <video
             src={previewUrl}
             controls
@@ -320,11 +320,11 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
       {showZoomModal && (
         <div
           onClick={() => setShowZoomModal(false)}
-          className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-fadeIn"
+          className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-fadeIn"
         >
           <button
             onClick={() => setShowZoomModal(false)}
-            className="absolute top-4 right-4 bg-slate-900/80 hover:bg-slate-800 text-white rounded-full p-2.5 transition-colors cursor-pointer"
+            className="absolute top-4 right-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full p-2.5 transition-colors cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -341,17 +341,22 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
       {/* Standard File Info Bar */}
       <div className="px-5 py-4 flex items-center justify-between gap-3">
         <div className="min-w-0 text-left">
-          <p className="text-[13px] font-semibold text-white truncate" title={file.filename}>
+          <p className="text-[13px] font-semibold text-slate-800 truncate" title={file.filename}>
             {file.filename}
           </p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-400 font-medium">
+          {file.description && (
+            <p className="text-[11px] text-slate-500 mt-1 italic break-words line-clamp-2" title={file.description}>
+              {file.description}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-550 font-medium">
             <span>{formatBytes(file.file_size)}</span>
-            <span className="text-[#6366f1] font-mono animate-pulse-soft">{timeLeft}</span>
+            <span className="text-red-500 font-mono animate-pulse-soft">{timeLeft}</span>
 
-            {file.is_locked && <span className="text-amber-500">Locked</span>}
+            {file.is_locked && <span className="text-amber-600">Locked</span>}
 
             {file.max_downloads === 1 && (
-              <span className="text-orange-400">Burns after download</span>
+              <span className="text-orange-600">Burns after download</span>
             )}
 
             {file.max_downloads && file.max_downloads > 1 && (
@@ -370,7 +375,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
             <button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer disabled:opacity-50"
+              className="p-2 rounded-lg text-slate-400 hover:text-red-650 hover:bg-red-50 transition-all cursor-pointer disabled:opacity-50"
               title="Delete"
             >
               {isDeleting ? (
@@ -388,7 +393,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
           {!isVoiceNote && (
             <button
               onClick={() => onQr(file)}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer"
+              className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
               title="QR Code"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -403,20 +408,45 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
 
           {!isVoiceNote && (
             downloadProgressEntry ? (
-              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#6366f1]/10 text-[#6366f1] text-[10px] font-bold font-mono">
+              <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-red-50 text-red-500 text-[10px] font-bold font-mono">
                 {downloadProgressEntry.status === 'connecting' && (
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 12a9 9 0 11-6.219-8.56"/>
                   </svg>
                 )}
-                {downloadProgressEntry.status === 'streaming' && <span>{downloadProgressEntry.percent}%</span>}
+                {downloadProgressEntry.status === 'streaming' && (
+                  <div className="relative w-8 h-8 flex items-center justify-center">
+                    <svg className="w-8 h-8 -rotate-90">
+                      <circle
+                        cx="16"
+                        cy="16"
+                        r="11"
+                        className="stroke-slate-200 fill-none"
+                        strokeWidth="2"
+                      />
+                      <circle
+                        cx="16"
+                        cy="16"
+                        r="11"
+                        className="stroke-red-500 fill-none transition-all duration-300"
+                        strokeWidth="2"
+                        strokeDasharray={2 * Math.PI * 11}
+                        strokeDashoffset={2 * Math.PI * 11 * (1 - (downloadProgressEntry.percent || 0) / 100)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span className="absolute text-[8px] font-bold font-mono text-slate-700">
+                      {downloadProgressEntry.percent}%
+                    </span>
+                  </div>
+                )}
                 {downloadProgressEntry.status === 'cloud' && (
                   <svg className="w-4 h-4 animate-bounce" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/>
                   </svg>
                 )}
                 {downloadProgressEntry.status === 'complete' && (
-                  <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
                 )}
@@ -424,7 +454,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
             ) : (
               <button
                 onClick={() => onDownload(file)}
-                className="p-2 rounded-lg text-slate-400 hover:text-[#6366f1] hover:bg-[#6366f1]/10 transition-all cursor-pointer"
+                className="p-2 rounded-lg text-slate-400 hover:text-red-550 hover:bg-red-50 transition-all cursor-pointer"
                 title="Download"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

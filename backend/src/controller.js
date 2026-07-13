@@ -11,16 +11,25 @@ const archiver = require('archiver');
 
 // Helper: Hashing function for IP addresses to create an anonymous Room ID
 const hashIp = (ip) => {
-    let cleanIp = ip.replace(/^::ffff:/, '');
+    let cleanIp = ip.replace(/^::ffff:/, '').trim();
     if (
         cleanIp === '::1' || 
         cleanIp === '127.0.0.1' || 
         cleanIp === 'localhost' ||
         cleanIp.startsWith('192.168.') ||
         cleanIp.startsWith('10.') ||
-        cleanIp.startsWith('172.16.')
+        cleanIp.startsWith('172.16.') ||
+        cleanIp.startsWith('fe80:') ||
+        cleanIp.startsWith('fc') ||
+        cleanIp.startsWith('fd')
     ) {
         cleanIp = 'local-stash-room';
+    } else if (cleanIp.includes(':')) {
+        // Group IPv6 devices by their /64 subnet prefix (first 4 blocks)
+        const parts = cleanIp.split(':');
+        if (parts.length >= 4) {
+            cleanIp = parts.slice(0, 4).join(':');
+        }
     }
     return crypto.createHash("sha256").update(cleanIp).digest('hex').substring(0, 12);
 };
@@ -101,7 +110,7 @@ export const uploadFile = async (req, res, next) => {
             return next(new AppError('No files provided. Please attach files under the "files" field.', 400));
         }
 
-        const { password, expires_in, max_downloads } = req.body;
+        const { password, expires_in, max_downloads, description } = req.body;
 
         const clientIP = req.ip || req.headers['x-forwarded-for'] || '127.0.0.1';
         let room_id = req.body.room_id;
@@ -234,7 +243,8 @@ export const uploadFile = async (req, res, next) => {
                 expires_at: expires_at,
                 max_downloads: parsedMaxDownloads,
                 download_count: 0,
-                uploaded_at: Date.now()
+                uploaded_at: Date.now(),
+                description: description ? description.trim() : null
             }]);
 
         if (dbError) {
@@ -252,7 +262,8 @@ export const uploadFile = async (req, res, next) => {
             is_locked: password_hash !== null,
             expires_at: expires_at,
             max_downloads: parsedMaxDownloads,
-            uploaded_at: Date.now()
+            uploaded_at: Date.now(),
+            description: description ? description.trim() : null
         };
 
         // Broadcast upload event to the WebSockets room
@@ -281,7 +292,7 @@ export const getFiles = async (req, res, next) => {
         // Fetch active metadata rows
         const { data: files, error } = await supabase
             .from('files')
-            .select('id, filename, file_size, mime_type, room_id, password_hash, expires_at, max_downloads, download_count, uploaded_at')
+            .select('id, filename, file_size, mime_type, room_id, password_hash, expires_at, max_downloads, download_count, uploaded_at, description')
             .eq('room_id', room_id)
             .gt('expires_at', Date.now());
 
@@ -495,8 +506,8 @@ export const getPreview = async (req, res, next) => {
         if (!file) return next(new AppError('File not found.', 404));
 
         // Verify room access
-        const token = req.headers['x-room-access-token'] || req.query.token || req.body.room_access_token;
-        const hostId = req.headers['x-host-id'] || req.query.host_id || req.body.host_id;
+        const token = req.headers['x-room-access-token'] || req.query.token || req.body?.room_access_token;
+        const hostId = req.headers['x-host-id'] || req.query.host_id || req.body?.host_id;
 
         const { data: roomData } = await supabase.from('rooms').select('*').eq('id', file.room_id).maybeSingle();
         if (roomData) {
@@ -611,7 +622,7 @@ export const deleteFile = async (req, res, next) => {
  */
 export const createRoom = async (req, res, next) => {
     try {
-        const { id, name, description, is_protected, access_mode } = req.body;
+        const { id, name, description, is_protected, access_mode, accept_only, password } = req.body;
         const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         if (!id || !name) {
@@ -634,13 +645,16 @@ export const createRoom = async (req, res, next) => {
         const created_at = Date.now();
         let stack_key = null;
         let stack_key_expires_at = null;
-        let accept_only = false;
+        let accept_only_val = !!accept_only;
 
-        if (access_mode === 'stack_key' || (is_protected && access_mode !== 'accept_only')) {
-            stack_key = Math.floor(100000 + Math.random() * 900000).toString();
-            stack_key_expires_at = Date.now() + 80000;
-        } else if (access_mode === 'accept_only') {
-            accept_only = true;
+        if (is_protected) {
+            if (accept_only_val) {
+                // Manual approval
+            } else {
+                // Passcode
+                stack_key = password ? password.trim() : Math.floor(100000 + Math.random() * 900000).toString();
+                stack_key_expires_at = Date.now() + 3153600000000;
+            }
         }
 
         const { data, error } = await supabase
@@ -652,7 +666,7 @@ export const createRoom = async (req, res, next) => {
                 is_protected: !!is_protected,
                 stack_key,
                 stack_key_expires_at,
-                accept_only,
+                accept_only: accept_only_val,
                 creator_socket_id: host_id,
                 created_at
             }])
@@ -717,30 +731,7 @@ export const getRoomDetails = async (req, res, next) => {
             room = newRoom;
         }
 
-        // Lazy key rotation check (rotates Stack Key every 80 seconds if it has expired)
-        if (room.stack_key && room.stack_key_expires_at < Date.now()) {
-            room.stack_key = Math.floor(100000 + Math.random() * 900000).toString();
-            room.stack_key_expires_at = Date.now() + 80000;
 
-            await supabase
-                .from('rooms')
-                .update({
-                    stack_key: room.stack_key,
-                    stack_key_expires_at: room.stack_key_expires_at
-                })
-                .eq('id', room.id);
-
-            // Notify occupants of the rotation
-            req.io.to(room.id).emit("room-updated", {
-                id: room.id,
-                name: room.name,
-                description: room.description,
-                is_protected: room.is_protected,
-                accept_only: room.accept_only,
-                has_stack_key: true,
-                stack_key_expires_at: room.stack_key_expires_at
-            });
-        }
 
         const isHost = hostId && room.creator_socket_id === hostId;
         const token = req.headers['x-room-access-token'] || req.query.token;
@@ -811,9 +802,6 @@ export const joinRoom = async (req, res, next) => {
         }
 
         if (room.stack_key) {
-            if (room.stack_key_expires_at < Date.now()) {
-                return next(new AppError('Access code has expired. Please try with a fresh code.', 400));
-            }
             if (room.stack_key !== inputKey) {
                 return next(new AppError('Incorrect access code.', 403));
             }
@@ -866,7 +854,7 @@ export const updateRoomSettings = async (req, res, next) => {
             if (is_protected) {
                 if (!stack_key) {
                     stack_key = Math.floor(100000 + Math.random() * 900000).toString();
-                    stack_key_expires_at = Date.now() + 80000;
+                    stack_key_expires_at = Date.now() + 3153600000000;
                 }
             } else {
                 stack_key = null;
@@ -936,7 +924,7 @@ export const rotateRoomKey = async (req, res, next) => {
         }
 
         const newKey = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = Date.now() + 80000;
+        const expiresAt = Date.now() + 3153600000000;
 
         const { data: updatedRoom, error: updateError } = await supabase
             .from('rooms')

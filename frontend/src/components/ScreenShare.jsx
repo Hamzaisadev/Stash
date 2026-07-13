@@ -86,7 +86,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
 
   // Render Video Container and Floating Controls overlay
   const renderStreamViewport = () => (
-    <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-900 shadow-2xl flex items-center justify-center group/video">
+    <div className="relative w-full aspect-video bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 shadow-xl flex items-center justify-center group/video">
       <video
         ref={videoRef}
         autoPlay
@@ -96,19 +96,19 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
       />
 
       {/* Red live overlay indicator */}
-      <div className="absolute top-4 left-4 bg-red-500/90 border border-red-400/25 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-2 select-none z-10">
+      <div className="absolute top-4 left-4 bg-red-500/95 border border-red-400/20 text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-2 select-none z-10 shadow-sm">
         <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
         {currentShareLabel}
       </div>
 
       {/* Glassmorphic floating control center overlays on video hover (or always in Focus mode) */}
-      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-2xl backdrop-blur-md bg-slate-950/70 border border-white/[0.08] shadow-lg transition-all duration-300 z-10 ${isFocusMode ? 'opacity-100' : 'opacity-0 group-hover/video:opacity-100'}`}>
+      <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2.5 rounded-2xl backdrop-blur-md bg-white/90 border border-slate-200 shadow-md transition-all duration-300 z-10 ${isFocusMode ? 'opacity-100' : 'opacity-0 group-hover/video:opacity-100'}`}>
         
         {/* Toggle Microphone (Presenter only, webcam type) */}
         {isSharing && shareType === 'webcam' && (
           <button
             onClick={toggleMic}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${isMicMuted ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-slate-900 border-white/[0.06] text-slate-200 hover:bg-slate-800'}`}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${isMicMuted ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
             title={isMicMuted ? "Unmute Microphone" : "Mute Microphone"}
           >
             {isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -119,7 +119,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {remoteStream && (
           <button
             onClick={toggleVolume}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${isVolumeMuted ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-slate-900 border-white/[0.06] text-slate-200 hover:bg-slate-800'}`}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${isVolumeMuted ? 'bg-red-550/15 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
             title={isVolumeMuted ? "Unmute Audio" : "Mute Audio"}
           >
             {isVolumeMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -130,10 +130,10 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {isSharing && (
           <button
             onClick={shareType === 'screen' ? onStartWebcam : onStart}
-            className="p-2 rounded-xl bg-slate-900 border border-white/[0.06] text-slate-200 hover:bg-slate-800 transition-all cursor-pointer"
+            className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 transition-all cursor-pointer"
             title={shareType === 'screen' ? "Switch to Webcam Share" : "Switch to Screen Share"}
           >
-            {shareType === 'screen' ? <Video className="w-4 h-4 text-purple-400" /> : <Monitor className="w-4 h-4 text-indigo-400" />}
+            {shareType === 'screen' ? <Video className="w-4 h-4 text-red-500" /> : <Monitor className="w-4 h-4 text-red-500" />}
           </button>
         )}
 
@@ -141,7 +141,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {isSharing && (
           <button
             onClick={onStop}
-            className="p-2 rounded-xl bg-red-500 hover:bg-red-600 border border-red-600 text-white transition-all cursor-pointer"
+            className="p-2 rounded-xl bg-red-500 hover:bg-red-650 border border-red-500 text-white transition-all cursor-pointer"
             title="Stop Sharing"
           >
             <Square className="w-4 h-4 fill-white" />
@@ -151,7 +151,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {/* Toggle Theater/Focus Mode */}
         <button
           onClick={() => setIsFocusMode(!isFocusMode)}
-          className={`p-2 rounded-xl border transition-all cursor-pointer ${isFocusMode ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400' : 'bg-slate-900 border-white/[0.06] text-slate-200 hover:bg-slate-800'}`}
+          className={`p-2 rounded-xl border transition-all cursor-pointer ${isFocusMode ? 'bg-red-50 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
           title={isFocusMode ? "Exit Focus Mode" : "Focus Mode"}
         >
           {isFocusMode ? <Minimize2 className="w-4 h-4" /> : <Tv className="w-4 h-4" />}
@@ -160,7 +160,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {/* Fullscreen Trigger */}
         <button
           onClick={toggleFullscreen}
-          className="p-2 rounded-xl bg-slate-900 border border-white/[0.06] text-slate-200 hover:bg-slate-800 transition-all cursor-pointer"
+          className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 transition-all cursor-pointer"
           title="Fullscreen"
         >
           <Maximize2 className="w-4 h-4" />
@@ -172,11 +172,11 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
   // If in Focus Mode, render fullscreen layout overlay
   if (isFocusMode && isActiveStream) {
     return (
-      <div className="fixed inset-0 z-[999] bg-[#07070a] flex flex-col justify-center items-center p-4 md:p-8 animate-fadeIn text-slate-200">
+      <div className="fixed inset-0 z-[999] bg-slate-50 flex flex-col justify-center items-center p-4 md:p-8 animate-fadeIn text-slate-800">
         {/* Close/Exit Focus Page button on top right */}
         <button 
           onClick={() => setIsFocusMode(false)}
-          className="absolute top-6 right-6 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-white/[0.08] text-slate-400 hover:text-white transition-all cursor-pointer z-20 shadow-md"
+          className="absolute top-6 right-6 p-2 rounded-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-550 hover:text-slate-800 transition-all cursor-pointer z-20 shadow-sm"
           title="Exit Focus Page"
         >
           <X className="w-5 h-5" />
@@ -191,15 +191,15 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
 
   // Normal Inline Viewport
   return (
-    <div className="w-full bg-[#111118]/60 border border-white/[0.06] rounded-2xl p-6 flex flex-col items-center justify-center space-y-5 animate-scaleUp">
-      <div className="text-center text-slate-400">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-indigo-400 mb-1">Live Call & Screen Share</h4>
+    <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center space-y-5 shadow-sm animate-scaleUp">
+      <div className="text-center text-slate-500">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-red-550 mb-1">Live Call & Screen Share</h4>
         <p className="text-xs max-w-md leading-normal mx-auto text-slate-400">
           {isSharing 
             ? `You are currently casting your ${shareType === 'webcam' ? 'camera' : 'screen'} stream to this room.` 
             : remoteStream 
               ? "A peer is sharing their stream. Watch or expand focus below." 
-              : "Cast your screen or camera feed in real-time. Zero configuration, P2P encryption."}
+              : "Cast your screen or camera feed in real-time. Zero configuration, secure sharing."}
         </p>
       </div>
 
@@ -214,26 +214,26 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
           <button
             type="button"
             onClick={onStart}
-            className="flex flex-col items-center justify-center p-6 bg-slate-950/40 border border-slate-900 hover:border-indigo-500/50 hover:bg-indigo-500/[0.02] text-slate-300 hover:text-white rounded-2xl cursor-pointer transition-all duration-350 shadow-inner group"
+            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-650 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
           >
-            <div className="p-3 bg-indigo-500/10 rounded-full text-indigo-400 group-hover:scale-110 transition-transform duration-300 mb-3">
+            <div className="p-3 bg-red-50 rounded-full text-red-500 group-hover:scale-110 transition-transform duration-300 mb-3 shadow-inner">
               <Monitor className="w-6 h-6" />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider mb-1">Share Screen</span>
-            <span className="text-[10px] text-slate-500 text-center leading-normal">Cast your desktop window or chrome tab</span>
+            <span className="text-[10px] text-slate-400 text-center leading-normal">Cast your desktop window or chrome tab</span>
           </button>
 
           {/* Webcam Share option */}
           <button
             type="button"
             onClick={onStartWebcam}
-            className="flex flex-col items-center justify-center p-6 bg-slate-950/40 border border-slate-900 hover:border-purple-500/50 hover:bg-purple-500/[0.02] text-slate-300 hover:text-white rounded-2xl cursor-pointer transition-all duration-350 shadow-inner group"
+            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-650 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
           >
-            <div className="p-3 bg-purple-500/10 rounded-full text-purple-400 group-hover:scale-110 transition-transform duration-300 mb-3">
+            <div className="p-3 bg-red-50 rounded-full text-red-500 group-hover:scale-110 transition-transform duration-300 mb-3 shadow-inner">
               <Video className="w-6 h-6" />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider mb-1">Share Webcam</span>
-            <span className="text-[10px] text-slate-500 text-center leading-normal">Turn on your camera and microphone</span>
+            <span className="text-[10px] text-slate-400 text-center leading-normal">Turn on your camera and microphone</span>
           </button>
         </div>
       )}
@@ -245,7 +245,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
             <button
               type="button"
               onClick={onStop}
-              className="flex items-center gap-2 bg-red-500/10 border border-red-500/35 text-red-400 hover:bg-red-500/20 text-xs font-semibold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
+              className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-500 hover:bg-red-100/60 text-xs font-semibold px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm active:scale-95"
             >
               <Square className="w-3.5 h-3.5 fill-current" />
               Stop Sharing

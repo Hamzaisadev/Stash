@@ -27,6 +27,7 @@ const io = new Server(server, {
 
 // Track which socket ID is the host of each room (in-memory, resets on server restart)
 const roomHosts = new Map(); // roomId -> hostClientId
+const roomClipboards = new Map(); // roomId -> Array of { text, time, senderClientId }
 
 // Configure Socket.io room matching, clipboard sync & WebRTC signaling
 io.on("connection", (socket) => {
@@ -40,6 +41,10 @@ io.on("connection", (socket) => {
             roomHosts.set(roomId, clientId);
         }
         console.log(`Socket client ${socket.id} (${clientId}) joined room: ${roomId}${isHost ? ' [HOST]' : ''}`);
+
+        // Transmit existing room clipboard history to newly joined devices
+        const history = roomClipboards.get(roomId) || [];
+        socket.emit("clipboard-history", history);
     });
 
     // Accept Only manual approval queue signaling
@@ -81,9 +86,30 @@ io.on("connection", (socket) => {
         console.log(`Host denied guest socket ${guestSocketId} for room ${roomId}`);
     });
 
+    socket.on("kick-user", ({ roomId, guestSocketId, guestClientId, hostId }) => {
+        // Verify the sender is the registered host
+        const registeredHost = roomHosts.get(roomId);
+        if (registeredHost && registeredHost !== hostId) {
+            console.warn(`Unauthorized kick attempt by ${hostId} for room ${roomId}`);
+            return;
+        }
+        // Send a kick signal directly to the guest socket
+        io.to(guestSocketId).emit("room-kicked", { roomId });
+        console.log(`Host ${hostId} kicked guest socket ${guestSocketId} from room ${roomId}`);
+    });
+
     // Cross-device clipboard sync relay
-    socket.on("clipboard-sync", ({ roomId, text }) => {
-        socket.to(roomId).emit("clipboard-sync", { text, senderId: socket.id });
+    socket.on("clipboard-sync", ({ roomId, text, clientId }) => {
+        if (!roomClipboards.has(roomId)) {
+            roomClipboards.set(roomId, []);
+        }
+        const history = roomClipboards.get(roomId);
+        const newItem = { text, time: Date.now(), senderClientId: clientId || socket.id };
+        history.push(newItem);
+        if (history.length > 30) {
+            history.shift();
+        }
+        socket.to(roomId).emit("clipboard-sync", { text, senderClientId: clientId || socket.id });
     });
 
     // Relay P2P file availability queries to everyone in the room

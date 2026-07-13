@@ -78,7 +78,7 @@ const getFileFromIndexedDB = async (fileId) => {
 export function useStash() {
     // 1. State
     const [room, setRoom] = useState({ id: "", files: [], description: "", is_protected: false, accept_only: false, stack_key: null });
-    const [status, setStatus] = useState({ isLoading: false, isUploading: false, error: null });
+    const [status, setStatus] = useState({ isLoading: false, isUploading: false, isVoiceUploading: false, error: null });
     const [downloadProgress, setDownloadProgress] = useState({});
     const [clipboard, setClipboard] = useState([]);
     const [gate, setGate] = useState(null);
@@ -93,6 +93,11 @@ export function useStash() {
     useEffect(() => {
         localStorage.setItem('stash_joined_rooms', JSON.stringify(joinedRooms));
     }, [joinedRooms]);
+
+    const roomRef = useRef(room);
+    useEffect(() => {
+        roomRef.current = room;
+    }, [room]);
 
     // Live Screen Share states
     const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -125,6 +130,22 @@ export function useStash() {
     useEffect(() => {
         const socket = io(SOCKET_BASE, { withCredentials: true });
         socketRef.current = socket;
+
+        socket.on("connect", () => {
+            console.log("Socket connected:", socket.id);
+            setTimeout(() => {
+                if (socketRef.current && roomRef.current.id) {
+                    const isHost = roomRef.current.creator_socket_id === generateClientId() ||
+                                   roomRef.current.creator_socket_id === 'system';
+                    socketRef.current.emit("join-room", {
+                        roomId: roomRef.current.id,
+                        clientId: generateClientId(),
+                        isHost
+                    });
+                    console.log("Re-emitted join-room on connect:", roomRef.current.id, "isHost:", isHost);
+                }
+            }, 50);
+        });
 
         // New file uploaded in room
         socket.on("file-uploaded", (newFile) => {
@@ -203,8 +224,26 @@ export function useStash() {
             fireNotification("Access Denied", `Your request to join was denied.`);
         });
 
+        socket.on("room-kicked", ({ roomId }) => {
+            const tokens = JSON.parse(localStorage.getItem('stash_room_tokens') || '{}');
+            delete tokens[roomId];
+            localStorage.setItem('stash_room_tokens', JSON.stringify(tokens));
+
+            setJoinedRooms(prev => prev.filter(r => r.id !== roomId));
+
+            if (roomRef.current.id === roomId) {
+                setRoom({ id: roomId, files: [], description: "", is_protected: true, accept_only: true, stack_key: null });
+                setGate({ require_password: false, accept_only: true, room_id: roomId });
+            }
+
+            toast.error("You have been removed from this room by the host.");
+        });
+
         // Feature 1: Cross-device clipboard sync
-        socket.on("clipboard-sync", ({ text }) => {
+        socket.on("clipboard-sync", ({ text, senderClientId }) => {
+            const myClientId = generateClientId();
+            if (senderClientId === myClientId) return;
+
             setClipboard(prev => [...prev, { text, time: Date.now(), fromRemote: true }]);
             fireNotification("Clipboard received", text.substring(0, 80));
 
@@ -220,6 +259,16 @@ export function useStash() {
             });
         });
 
+        socket.on("clipboard-history", (history) => {
+            const myClientId = generateClientId();
+            const mappedHistory = history.map(item => ({
+                text: item.text,
+                time: item.time,
+                fromRemote: item.senderClientId !== myClientId
+            }));
+            setClipboard(mappedHistory);
+        });
+
         // Feature 2: Live Download Receipt updates
         socket.on("file-downloaded", ({ fileId, downloadCount }) => {
             setRoom(prev => ({
@@ -233,7 +282,7 @@ export function useStash() {
             const file = await getFileFromIndexedDB(fileId);
             if (file) {
                 socket.emit("p2p-signal", {
-                    roomId: room.id,
+                    roomId: roomRef.current.id,
                     targetId: requesterId,
                     signal: { type: "p2p-ready", fileId }
                 });
@@ -261,7 +310,7 @@ export function useStash() {
         socket.on("screen-share-start", ({ senderId }) => {
             // Presenter started sharing screen. Send request to bind tracks
             socket.emit("screen-share-signal", {
-                roomId: room.id,
+                roomId: roomRef.current.id,
                 targetId: senderId,
                 signal: { type: "screen-request" }
             });
@@ -293,7 +342,7 @@ export function useStash() {
                     pc.onicecandidate = (event) => {
                         if (event.candidate && socketRef.current) {
                             socketRef.current.emit("screen-share-signal", {
-                                roomId: room.id,
+                                roomId: roomRef.current.id,
                                 targetId: senderId,
                                 signal: { candidate: event.candidate }
                             });
@@ -304,7 +353,7 @@ export function useStash() {
                     await pc.setLocalDescription(offer);
 
                     socketRef.current.emit("screen-share-signal", {
-                        roomId: room.id,
+                        roomId: roomRef.current.id,
                         targetId: senderId,
                         signal: { sdp: pc.localDescription }
                     });
@@ -324,7 +373,7 @@ export function useStash() {
                     pc.onicecandidate = (event) => {
                         if (event.candidate && socketRef.current) {
                             socketRef.current.emit("screen-share-signal", {
-                                roomId: room.id,
+                                roomId: roomRef.current.id,
                                 targetId: senderId,
                                 signal: { candidate: event.candidate }
                             });
@@ -336,7 +385,7 @@ export function useStash() {
                     await pc.setLocalDescription(answer);
 
                     socketRef.current.emit("screen-share-signal", {
-                        roomId: room.id,
+                        roomId: roomRef.current.id,
                         targetId: senderId,
                         signal: { sdp: pc.localDescription }
                     });
@@ -474,13 +523,14 @@ export function useStash() {
 
     const createRoom = async (roomData) => {
         try {
-            const roomId = roomData.id || Math.random().toString(36).substring(2, 10);
+            const roomId = roomData.id ? roomData.id.trim() : Math.random().toString(36).substring(2, 10);
             const payload = {
                 id: roomId,
                 name: roomData.name,
                 description: roomData.description || '',
                 is_protected: !!roomData.is_protected,
-                access_mode: roomData.access_mode || 'none'
+                accept_only: !!roomData.accept_only,
+                password: roomData.password
             };
             const res = await fetch(`${API_BASE}/rooms`, {
                 method: 'POST',
@@ -667,29 +717,40 @@ export function useStash() {
         }
     }, [room.id]);
 
+    const joinRoomChannel = useCallback(() => {
+        if (socketRef.current && room.id) {
+            const isHost = room.creator_socket_id === generateClientId() ||
+                           room.creator_socket_id === 'system';
+            socketRef.current.emit("join-room", {
+                roomId: room.id,
+                clientId: generateClientId(),
+                isHost
+            });
+            console.log("Emitted join-room:", room.id, "isHost:", isHost);
+        }
+    }, [room.id, room.creator_socket_id]);
+
     // Join room on Socket and fetch its files + details whenever room.id changes
     useEffect(() => {
         if (!room.id) return;
         fetchRoomFiles(room.id);
-        // fetchRoomDetails is called here to get latest room info including stack_key
-        // We use a local closure ref to get the latest room.creator_socket_id after it resolves
         fetchRoomDetails(room.id).then((res) => {
-            if (res && res.room && socketRef.current) {
-                const isHost = res.room.creator_socket_id === generateClientId() ||
-                               res.room.creator_socket_id === 'system';
-                socketRef.current.emit("join-room", {
-                    roomId: room.id,
-                    clientId: generateClientId(),
-                    isHost
-                });
+            if (res && res.room) {
+                joinRoomChannel();
             }
         });
-    }, [room.id]);
+    }, [room.id, joinRoomChannel]);
 
     // 5. File Upload (with folder support)
     const uploadFile = async (selectedFiles, options) => {
         if (!selectedFiles) return;
-        setStatus(prev => ({ ...prev, isUploading: true, error: null }));
+        
+        const isVoice = options?.isVoice || false;
+        if (isVoice) {
+            setStatus(prev => ({ ...prev, isVoiceUploading: true, error: null }));
+        } else {
+            setStatus(prev => ({ ...prev, isUploading: true, error: null }));
+        }
 
         try {
             const formData = new FormData();
@@ -710,6 +771,9 @@ export function useStash() {
             formData.append('expires_in', options.expiresIn);
             if (options.maxDownloads) {
                 formData.append('max_downloads', options.maxDownloads);
+            }
+            if (options.description) {
+                formData.append('description', options.description);
             }
 
             const res = await fetch(`${API_BASE}/upload`, {
@@ -741,7 +805,11 @@ export function useStash() {
             setStatus(prev => ({ ...prev, error: err.message }));
             return false;
         } finally {
-            setStatus(prev => ({ ...prev, isUploading: false }));
+            if (isVoice) {
+                setStatus(prev => ({ ...prev, isVoiceUploading: false }));
+            } else {
+                setStatus(prev => ({ ...prev, isUploading: false }));
+            }
         }
     };
 
@@ -1061,7 +1129,7 @@ export function useStash() {
     // 8. Clipboard sync
     const sendClipboard = (text) => {
         if (!text.trim() || !socketRef.current) return;
-        socketRef.current.emit("clipboard-sync", { roomId: room.id, text });
+        socketRef.current.emit("clipboard-sync", { roomId: room.id, text, clientId });
         setClipboard(prev => [...prev, { text, time: Date.now(), fromRemote: false }]);
     };
 
@@ -1153,6 +1221,12 @@ export function useStash() {
         }
     };
 
+    const kickGuest = (roomId, guestSocketId, guestClientId) => {
+        if (socketRef.current) {
+            socketRef.current.emit("kick-user", { roomId, guestSocketId, guestClientId, hostId: clientId });
+        }
+    };
+
     return {
         room,
         status,
@@ -1194,6 +1268,7 @@ export function useStash() {
         requestAccessAcceptOnly,
         approveGuest,
         denyGuest,
+        kickGuest,
         updateRoomSettings,
         rotateStackKey,
         sendClipboard,
