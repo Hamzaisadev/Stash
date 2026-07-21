@@ -37,6 +37,7 @@ Stash lets users create or auto-derive a room (based on client IP), upload files
 - Controllers: `backend/src/controller.js` — core business logic: creating rooms, uploading files (single or multi-file zipped), generating signed preview URLs, secure download flow, burn-after-read semantics, and room cleanup.
 
 Security & behaviors:
+
 - Rooms may be auto-created based on hashed client IPs to support quick local network sharing.
 - Protected rooms support passcodes or manual approval. Access verification uses tokens (`x-room-access-token`) and `x-host-id` headers.
 - Files can be password-protected, have expiration times, and limited download counts.
@@ -49,6 +50,7 @@ Security & behaviors:
 - Hooks: `frontend/src/hooks/useStash.js` — centralizes API calls, socket management, and stateful interactions used across the UI.
 
 Features visible in the UI:
+
 - Drag & drop and paste uploads
 - Live file list with upload and download progress
 - Password-protected files and burn-after-read support
