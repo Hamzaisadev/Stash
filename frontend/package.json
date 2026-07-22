@@ -1,5 +1,6 @@
 {
-  "name": "frontend",
+  "name": "stash-frontend",
+  "description": "Stash frontend application for secure instant file sharing rooms.",
   "private": true,
   "version": "1.3.0",
   "type": "module",

@@ -1,16 +1,35 @@
-# React + Vite
+# Stash Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repository contains the Stash web frontend: a responsive React + Vite application built for secure temporary file rooms and instant device-to-device sharing.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Hosts the landing page and main app UI
+- Manages room creation, joining, and access control
+- Uploads files with drag-and-drop or clipboard paste
+- Streams room events via Socket.io for live collaboration
+- Handles preview and download flows for protected files
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+Open the local app URL to launch the app.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Production build
+
+```bash
+npm run build
+npm run preview
+```
+
+## Notes
+
+- The frontend expects the backend API to be available under `/api`.
+- Use `VITE_BACKEND_URL` in `.env` to configure the production backend origin.
+- Main entry file: `src/main.jsx`
+- Landing page component: `src/pages/Landing.jsx`

@@ -1,0 +1,16 @@
+{
+  "name": "Stash",
+  "short_name": "Stash",
+  "description": "Secure instant file rooms for sharing files, screens, and clipboard content across devices.",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x48",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#f8fafc"
+}
