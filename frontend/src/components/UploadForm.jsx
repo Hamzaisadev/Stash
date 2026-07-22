@@ -1,10 +1,24 @@
-import React, { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { toast } from 'sonner';
-import { Upload, ChevronDown, ChevronUp, Lock, Clock, Flame, Download, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useRef } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import {
+  Upload,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+  Clock,
+  Flame,
+  Download,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 
-export default function UploadForm({ uploadFile, isUploading }) {
+export default function UploadForm({
+  uploadFile,
+  isUploading,
+  uploadProgress,
+}) {
   const [files, setFiles] = useState([]);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,12 +32,12 @@ export default function UploadForm({ uploadFile, isUploading }) {
   const fileInputRef = useRef(null);
 
   const formatBytes = (bytes, decimals = 1) => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
     const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
   };
 
   const handleDrag = (e) => {
@@ -100,7 +114,7 @@ export default function UploadForm({ uploadFile, isUploading }) {
       password,
       expiresIn,
       maxDownloads: burnAfterDownload ? "1" : maxDownloads,
-      description
+      description,
     });
 
     if (res) {
@@ -119,18 +133,22 @@ export default function UploadForm({ uploadFile, isUploading }) {
   };
 
   return (
-    <form onSubmit={handleUploadSubmit} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm h-full flex flex-col justify-between min-h-[340px]" onDragEnter={handleDrag}>
+    <form
+      onSubmit={handleUploadSubmit}
+      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm h-full flex flex-col justify-between min-h-[340px]"
+      onDragEnter={handleDrag}
+    >
       <div
         onClick={() => fileInputRef.current?.click()}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
         className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-50 hover:bg-slate-100/50 flex-grow flex-1 ${
-          dragActive 
-            ? 'border-red-400 bg-red-50/50' 
-            : files.length > 0 
-              ? 'border-red-300 bg-red-50/20' 
-              : 'border-slate-200 hover:border-slate-300'
+          dragActive
+            ? "border-red-400 bg-red-50/50"
+            : files.length > 0
+              ? "border-red-300 bg-red-50/20"
+              : "border-slate-200 hover:border-slate-300"
         }`}
       >
         <input
@@ -140,12 +158,14 @@ export default function UploadForm({ uploadFile, isUploading }) {
           onChange={handleFileSelect}
           className="hidden"
         />
-        <Upload className={`w-6 h-6 mb-2 transition-colors ${dragActive || files.length > 0 ? 'text-red-500 animate-bounce' : 'text-slate-400'}`} />
+        <Upload
+          className={`w-6 h-6 mb-2 transition-colors ${dragActive || files.length > 0 ? "text-red-500 animate-bounce" : "text-slate-400"}`}
+        />
         <span className="text-xs font-semibold text-slate-700 text-center truncate max-w-xs px-2">
           {files.length > 0
-            ? (files.length === 1
+            ? files.length === 1
               ? files[0].name
-              : `${files.length} items ready to stash`)
+              : `${files.length} items ready to stash`
             : "Drag files or select to upload"}
         </span>
         <span className="text-[10px] text-slate-400 mt-1 font-mono">
@@ -157,6 +177,20 @@ export default function UploadForm({ uploadFile, isUploading }) {
 
       {files.length > 0 && (
         <div className="space-y-4 pt-2">
+          {uploadProgress?.status === "uploading" && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-100 p-3">
+              <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold mb-2">
+                <span>Uploading {uploadProgress.fileName}</span>
+                <span>{uploadProgress.percent}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-red-500 transition-all duration-150"
+                  style={{ width: `${uploadProgress.percent}%` }}
+                />
+              </div>
+            </div>
+          )}
           {/* Collapsible advanced security config */}
           <button
             type="button"
@@ -164,7 +198,11 @@ export default function UploadForm({ uploadFile, isUploading }) {
             className="flex items-center justify-between w-full text-[10px] uppercase tracking-wider font-bold text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1">Advanced Settings</span>
-            {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {showAdvanced ? (
+              <ChevronUp className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5" />
+            )}
           </button>
 
           {showAdvanced && (
@@ -179,19 +217,23 @@ export default function UploadForm({ uploadFile, isUploading }) {
                   type="button"
                   onClick={() => setBurnAfterDownload(!burnAfterDownload)}
                   className={`relative inline-flex h-4.5 w-8.5 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
-                    burnAfterDownload ? 'bg-orange-550' : 'bg-slate-200'
+                    burnAfterDownload ? "bg-orange-550" : "bg-slate-200"
                   }`}
                 >
-                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 ${
-                    burnAfterDownload ? 'translate-x-4' : 'translate-x-0.5'
-                  }`} />
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 ${
+                      burnAfterDownload ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
                 </button>
               </div>
 
               {/* File Description */}
               <div className="space-y-1.5 text-left">
                 <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="text-slate-500 text-[10px] leading-none">📝</span>
+                  <span className="text-slate-500 text-[10px] leading-none">
+                    📝
+                  </span>
                   File Description
                 </label>
                 <Input
@@ -223,7 +265,11 @@ export default function UploadForm({ uploadFile, isUploading }) {
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
                     title={showPassword ? "Hide password" : "Show password"}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -273,9 +319,24 @@ export default function UploadForm({ uploadFile, isUploading }) {
           >
             {isUploading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-4 w-4 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
                 </svg>
                 Uploading items...
               </span>

@@ -272,7 +272,28 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
             </button>
           </div>
         )}
-      </div>
+      {downloadProgressEntry && (
+        <div className="mt-3 w-full">
+          <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-red-500 transition-all duration-150"
+              style={{ width: `${downloadProgressEntry.percent || 0}%` }}
+            />
+          </div>
+          <div className="mt-1 text-[10px] text-slate-500 flex items-center justify-between">
+            <span>
+              {downloadProgressEntry.status === 'connecting'
+                ? 'Connecting…'
+                : downloadProgressEntry.status === 'streaming'
+                ? 'Downloading…'
+                : downloadProgressEntry.status === 'cloud'
+                ? 'Downloading…'
+                : 'Processing...'}
+            </span>
+            <span>{downloadProgressEntry.percent || 0}%</span>
+          </div>
+        </div>
+      )}
     );
   }
 

@@ -1,22 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useStash } from '../hooks/useStash.js';
-import FileCard from '../components/FileCard.jsx';
-import VoiceRecorder from '../components/VoiceRecorder.jsx';
-import ScreenShare from '../components/ScreenShare.jsx';
-import Sidebar from '../components/Sidebar.jsx';
-import GateScreen from '../components/GateScreen.jsx';
-import UploadForm from '../components/UploadForm.jsx';
-import FileListFeed from '../components/FileListFeed.jsx';
-import ClipboardFeed from '../components/ClipboardFeed.jsx';
+import React, { useState, useEffect, useRef } from "react";
+import { useStash } from "../hooks/useStash.js";
+import FileCard from "../components/FileCard.jsx";
+import VoiceRecorder from "../components/VoiceRecorder.jsx";
+import ScreenShare from "../components/ScreenShare.jsx";
+import Sidebar from "../components/Sidebar.jsx";
+import GateScreen from "../components/GateScreen.jsx";
+import UploadForm from "../components/UploadForm.jsx";
+import FileListFeed from "../components/FileListFeed.jsx";
+import ClipboardFeed from "../components/ClipboardFeed.jsx";
 
 // Shadcn UI components
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogDescription,
-  DialogFooter
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,25 +25,23 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
-import { 
-  Pencil, 
-  Share2, 
-  Trash2, 
-  RefreshCw, 
-  AlertCircle, 
-  Unlock, 
-  Lock, 
-  QrCode, 
-  Copy, 
+import {
+  Pencil,
+  Share2,
+  Trash2,
+  AlertCircle,
+  Unlock,
+  Lock,
+  QrCode,
+  Copy,
   ExternalLink,
   Info,
-  RotateCw,
   LogOut,
   X,
   Menu,
   Upload,
   Eye,
-  EyeOff
+  EyeOff,
 } from "lucide-react";
 
 function AppPage() {
@@ -61,6 +59,7 @@ function AppPage() {
     fetchDefaultRoom,
     fetchRoomDetails,
     refreshFiles,
+    uploadProgress,
     uploadFile,
     downloadFile,
     deleteFile,
@@ -79,13 +78,14 @@ function AppPage() {
     fetchPreviewUrl,
     startScreenShare,
     startWebcamShare,
-    stopScreenShare
+    stopScreenShare,
   } = useStash();
 
-  const isRoomHost = room.creator_socket_id === clientId || room.creator_socket_id === 'system';
+  const isRoomHost =
+    room.creator_socket_id === clientId || room.creator_socket_id === "system";
 
   // Mode and form states
-  const [activeMode, setActiveMode] = useState('files'); // files, clipboard, voice, screen
+  const [activeMode, setActiveMode] = useState("files"); // files, clipboard, voice, screen
 
   // Modals state variables
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -124,7 +124,7 @@ function AppPage() {
 
   // Ask for notification permissions on lobby load
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
+    if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
   }, []);
@@ -134,17 +134,21 @@ function AppPage() {
     const handleRequest = (e) => {
       const data = e.detail;
       if (data.roomId === room.id) {
-        setRequests(prev => {
-          if (prev.find(r => r.clientId === data.clientId)) return prev;
+        setRequests((prev) => {
+          if (prev.find((r) => r.clientId === data.clientId)) return prev;
           return [...prev, data];
         });
 
         // Trigger native desktop notification if window is backgrounded
-        if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+        if (
+          "Notification" in window &&
+          Notification.permission === "granted" &&
+          document.hidden
+        ) {
           const notif = new Notification(`Lobby: ${data.guestName} joined`, {
-            body: `Guest wants to join your room "${room.name || 'stash:default'}". Click to approve/deny.`,
+            body: `Guest wants to join your room "${room.name || "stash:default"}". Click to approve/deny.`,
             tag: `join-request-${data.clientId}`,
-            requireInteraction: true
+            requireInteraction: true,
           });
           notif.onclick = () => {
             window.focus();
@@ -153,24 +157,28 @@ function AppPage() {
         }
       }
     };
-    window.addEventListener('stash-join-request', handleRequest);
-    return () => window.removeEventListener('stash-join-request', handleRequest);
+    window.addEventListener("stash-join-request", handleRequest);
+    return () =>
+      window.removeEventListener("stash-join-request", handleRequest);
   }, [room.id, room.name]);
 
   // Listen for custom events to switch active mode tabs
   useEffect(() => {
-    const switchToFiles = () => setActiveMode('files');
-    const switchToClipboard = () => setActiveMode('clipboard');
-    const switchToScreen = () => setActiveMode('screen');
+    const switchToFiles = () => setActiveMode("files");
+    const switchToClipboard = () => setActiveMode("clipboard");
+    const switchToScreen = () => setActiveMode("screen");
 
-    window.addEventListener('stash-switch-to-files', switchToFiles);
-    window.addEventListener('stash-switch-to-clipboard', switchToClipboard);
-    window.addEventListener('stash-switch-to-screen', switchToScreen);
+    window.addEventListener("stash-switch-to-files", switchToFiles);
+    window.addEventListener("stash-switch-to-clipboard", switchToClipboard);
+    window.addEventListener("stash-switch-to-screen", switchToScreen);
 
     return () => {
-      window.removeEventListener('stash-switch-to-files', switchToFiles);
-      window.removeEventListener('stash-switch-to-clipboard', switchToClipboard);
-      window.removeEventListener('stash-switch-to-screen', switchToScreen);
+      window.removeEventListener("stash-switch-to-files", switchToFiles);
+      window.removeEventListener(
+        "stash-switch-to-clipboard",
+        switchToClipboard,
+      );
+      window.removeEventListener("stash-switch-to-screen", switchToScreen);
     };
   }, []);
 
@@ -251,16 +259,16 @@ function AppPage() {
       }
     };
 
-    window.addEventListener('dragenter', handleDragEnter);
-    window.addEventListener('dragover', handleDragOver);
-    window.addEventListener('dragleave', handleDragLeave);
-    window.addEventListener('drop', handleDrop);
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("drop", handleDrop);
 
     return () => {
-      window.removeEventListener('dragenter', handleDragEnter);
-      window.removeEventListener('dragover', handleDragOver);
-      window.removeEventListener('dragleave', handleDragLeave);
-      window.removeEventListener('drop', handleDrop);
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("drop", handleDrop);
     };
   }, [uploadFile]);
 
@@ -268,14 +276,17 @@ function AppPage() {
   useEffect(() => {
     const handlePaste = async (e) => {
       const target = e.target;
-      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-      
+      const isInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable;
+
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       let hasFile = false;
       const filesToUpload = [];
-      
+
       for (const item of items) {
-        if (item.kind === 'file') {
+        if (item.kind === "file") {
           const file = item.getAsFile();
           if (file) {
             filesToUpload.push(file);
@@ -283,22 +294,19 @@ function AppPage() {
           }
         }
       }
-      
+
       if (hasFile && filesToUpload.length > 0) {
         e.preventDefault();
-        toast.promise(
-          uploadFile(filesToUpload),
-          {
-            loading: `Uploading pasted file: ${filesToUpload[0].name}...`,
-            success: `Pasted file "${filesToUpload[0].name}" stashed successfully!`,
-            error: "Failed to upload pasted file."
-          }
-        );
+        toast.promise(uploadFile(filesToUpload), {
+          loading: `Uploading pasted file: ${filesToUpload[0].name}...`,
+          success: `Pasted file "${filesToUpload[0].name}" stashed successfully!`,
+          error: "Failed to upload pasted file.",
+        });
         return;
       }
-      
+
       if (!isInput) {
-        const text = e.clipboardData.getData('text');
+        const text = e.clipboardData.getData("text");
         if (text && text.trim()) {
           e.preventDefault();
           sendClipboard(text.trim());
@@ -306,22 +314,26 @@ function AppPage() {
         }
       }
     };
-    
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
   }, [uploadFile, sendClipboard]);
 
   // URL Interception for QR code scans
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const downloadId = params.get('download');
+    const downloadId = params.get("download");
 
     if (downloadId && room.files.length > 0) {
-      const file = room.files.find(f => f.id === downloadId);
+      const file = room.files.find((f) => f.id === downloadId);
       if (file) {
         handleDownloadInitiation(file);
         // Clean URL query
-        window.history.replaceState({}, document.title, window.location.pathname);
+        window.history.replaceState(
+          {},
+          document.title,
+          window.location.pathname,
+        );
       }
     }
   }, [room.files]);
@@ -353,12 +365,12 @@ function AppPage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join Stash Room: ${room.name || 'default'}`,
+          title: `Join Stash Room: ${room.name || "default"}`,
           text: `Use Stash to share files, clipboard items, and screens instantly in this private room!`,
-          url: inviteLink
+          url: inviteLink,
         });
       } catch (err) {
-        if (err.name !== 'AbortError') {
+        if (err.name !== "AbortError") {
           toast.error("Failed to trigger native sharing sheet");
         }
       }
@@ -381,23 +393,28 @@ function AppPage() {
   // Handle Guest approvals
   const handleApprove = (guestClientId, guestSocketId, guestName = "Guest") => {
     approveGuest(room.id, guestSocketId, guestClientId);
-    setRequests(prev => prev.filter(r => r.clientId !== guestClientId));
-    setApprovedUsers(prev => {
-      if (prev.find(u => u.clientId === guestClientId)) return prev;
-      return [...prev, { clientId: guestClientId, socketId: guestSocketId, name: guestName }];
+    setRequests((prev) => prev.filter((r) => r.clientId !== guestClientId));
+    setApprovedUsers((prev) => {
+      if (prev.find((u) => u.clientId === guestClientId)) return prev;
+      return [
+        ...prev,
+        { clientId: guestClientId, socketId: guestSocketId, name: guestName },
+      ];
     });
     toast.success(`${guestName} approved!`);
   };
 
   const handleDeny = (guestClientId, guestSocketId) => {
     denyGuest(room.id, guestSocketId);
-    setRequests(prev => prev.filter(r => r.clientId !== guestClientId));
+    setRequests((prev) => prev.filter((r) => r.clientId !== guestClientId));
     toast.error("Guest access denied!");
   };
 
   const handleKick = (guestClientId, guestSocketId, guestName = "Guest") => {
     kickGuest(room.id, guestSocketId, guestClientId);
-    setApprovedUsers(prev => prev.filter(u => u.clientId !== guestClientId));
+    setApprovedUsers((prev) =>
+      prev.filter((u) => u.clientId !== guestClientId),
+    );
     toast.error(`${guestName} has been removed from the room.`);
   };
 
@@ -408,7 +425,7 @@ function AppPage() {
     setIsSavingEdit(true);
     const res = await updateRoomSettings(room.id, {
       name: editName.trim(),
-      description: editDescription.trim()
+      description: editDescription.trim(),
     });
     setIsSavingEdit(false);
     if (res.success) {
@@ -453,7 +470,7 @@ function AppPage() {
   return (
     <SidebarProvider>
       <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 font-sans selection:bg-red-100 selection:text-red-700">
-        <Sidebar 
+        <Sidebar
           myRooms={myRooms}
           joinedRooms={joinedRooms}
           currentRoomId={room.id}
@@ -469,19 +486,18 @@ function AppPage() {
           clipboardCount={clipboard.length}
           onOpenShareForRoom={handleOpenShareForRoom}
         />
-        
+
         <div className="flex-grow flex flex-col relative h-full overflow-y-auto">
           {gate ? (
-            <GateScreen 
-              gate={gate} 
-              joinRoomWithKey={joinRoomWithKey} 
-              requestAccessAcceptOnly={requestAccessAcceptOnly} 
-              fetchRoomDetails={fetchRoomDetails} 
+            <GateScreen
+              gate={gate}
+              joinRoomWithKey={joinRoomWithKey}
+              requestAccessAcceptOnly={requestAccessAcceptOnly}
+              fetchRoomDetails={fetchRoomDetails}
             />
           ) : (
             <div className="pb-32 pt-6 px-4">
               <div className="max-w-2xl mx-auto space-y-6">
-
                 {/* Notion-style Page Header */}
                 <header className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 sm:pb-4 sm:mb-6 text-left animate-fadeIn">
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -489,12 +505,14 @@ function AppPage() {
                     <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-850 hover:bg-slate-100 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5 sm:gap-2">
-                        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">{room.name || 'stash:default'}</h1>
-                        {room.id && room.id !== 'undefined' && (
+                        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
+                          {room.name || "stash:default"}
+                        </h1>
+                        {room.id && room.id !== "undefined" && (
                           <button
                             onClick={() => {
-                              setEditName(room.name || '');
-                              setEditDescription(room.description || '');
+                              setEditName(room.name || "");
+                              setEditDescription(room.description || "");
                               setShowEditModal(true);
                             }}
                             className="text-slate-400 hover:text-slate-700 transition-colors p-0.5 sm:p-1 shrink-0"
@@ -505,7 +523,9 @@ function AppPage() {
                         )}
                       </div>
                       {room.description && (
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate max-w-[140px] sm:max-w-none">{room.description}</p>
+                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate max-w-[140px] sm:max-w-none">
+                          {room.description}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -519,23 +539,18 @@ function AppPage() {
                       <Share2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
 
-                    {isRoomHost && room.id && room.id !== 'undefined' && (
-                      <button
-                        onClick={() => setDeleteTargetRoomId(room.id)}
-                        className="p-1 sm:p-1.5 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Delete Room"
-                      >
-                        <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                      </button>
-                    )}
-
-                    <button
-                      onClick={refreshFiles}
-                      className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                      title="Refresh feed"
-                    >
-                      <RefreshCw className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                    </button>
+                    {isRoomHost &&
+                      room.creator_socket_id !== "system" &&
+                      room.id &&
+                      room.id !== "undefined" && (
+                        <button
+                          onClick={() => setDeleteTargetRoomId(room.id)}
+                          className="p-1 sm:p-1.5 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Delete Room"
+                        >
+                          <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                        </button>
+                      )}
                   </div>
                 </header>
 
@@ -551,21 +566,22 @@ function AppPage() {
                     Interactive Content Feeds Switcher
                     ========================================== */}
                 <main className="space-y-6">
-
                   {/* A. Files Mode viewport */}
-                  {activeMode === 'files' && (
+                  {activeMode === "files" && (
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-                        <UploadForm 
-                          uploadFile={uploadFile} 
-                          isUploading={status.isUploading} 
+                        <UploadForm
+                          uploadFile={uploadFile}
+                          isUploading={status.isUploading}
+                          uploadProgress={uploadProgress}
                         />
                         <VoiceRecorder
                           onUpload={uploadFile}
                           isUploading={status.isVoiceUploading}
+                          uploadProgress={uploadProgress}
                         />
                       </div>
-                      <FileListFeed 
+                      <FileListFeed
                         room={room}
                         downloadProgress={downloadProgress}
                         onDownload={handleDownloadInitiation}
@@ -578,8 +594,8 @@ function AppPage() {
                   )}
 
                   {/* B. Clipboard sync viewport */}
-                  {activeMode === 'clipboard' && (
-                    <ClipboardFeed 
+                  {activeMode === "clipboard" && (
+                    <ClipboardFeed
                       clipboard={clipboard}
                       sendClipboard={sendClipboard}
                       clearClipboard={clearClipboard}
@@ -588,7 +604,7 @@ function AppPage() {
                   )}
 
                   {/* C. Screen Share viewport */}
-                  {activeMode === 'screen' && (
+                  {activeMode === "screen" && (
                     <div className="animate-scaleUp">
                       <ScreenShare
                         isSharing={screenShare.isSharing}
@@ -601,11 +617,13 @@ function AppPage() {
                       />
                     </div>
                   )}
-
                 </main>
 
                 {/* File Password unlock modal */}
-                <Dialog open={!!unlockingFile} onOpenChange={() => setUnlockingFile(null)}>
+                <Dialog
+                  open={!!unlockingFile}
+                  onOpenChange={() => setUnlockingFile(null)}
+                >
                   <DialogContent className="bg-white border-slate-200 max-w-xs text-slate-900">
                     <DialogHeader>
                       <DialogTitle className="text-sm font-bold flex items-center gap-2 text-red-500">
@@ -613,7 +631,11 @@ function AppPage() {
                         Unlocking File
                       </DialogTitle>
                       <DialogDescription className="text-[10px] text-slate-500 leading-normal">
-                        This file <span className="font-semibold text-slate-800 font-mono">{unlockingFile?.filename}</span> is protected. Enter the decryption password.
+                        This file{" "}
+                        <span className="font-semibold text-slate-800 font-mono">
+                          {unlockingFile?.filename}
+                        </span>{" "}
+                        is protected. Enter the decryption password.
                       </DialogDescription>
                     </DialogHeader>
 
@@ -628,18 +650,28 @@ function AppPage() {
                         type={showUnlockPassword ? "text" : "password"}
                         value={unlockPassword}
                         onChange={(e) => setUnlockPassword(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleUnlockSubmit()}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && handleUnlockSubmit()
+                        }
                         placeholder="Password"
                         autoFocus
                         className="bg-white border-slate-200 text-slate-800 text-xs pr-10 focus:ring-red-500/50 focus:border-red-500"
                       />
                       <button
                         type="button"
-                        onClick={() => setShowUnlockPassword(!showUnlockPassword)}
+                        onClick={() =>
+                          setShowUnlockPassword(!showUnlockPassword)
+                        }
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
-                        title={showUnlockPassword ? "Hide password" : "Show password"}
+                        title={
+                          showUnlockPassword ? "Hide password" : "Show password"
+                        }
                       >
-                        {showUnlockPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {showUnlockPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
 
@@ -662,13 +694,22 @@ function AppPage() {
                 </Dialog>
 
                 {/* QR Code popover modal */}
-                <Dialog open={!!activeQrFile} onOpenChange={() => setActiveQrFile(null)}>
+                <Dialog
+                  open={!!activeQrFile}
+                  onOpenChange={() => setActiveQrFile(null)}
+                >
                   <DialogContent className="bg-white border-slate-200 max-w-xs text-slate-900 text-center">
                     <DialogHeader className="flex flex-col items-center text-center">
                       <QrCode className="w-5 h-5 text-red-500 mb-1" />
-                      <DialogTitle className="text-sm font-bold">Scan to Download</DialogTitle>
+                      <DialogTitle className="text-sm font-bold">
+                        Scan to Download
+                      </DialogTitle>
                       <DialogDescription className="text-[10px] text-slate-500 max-w-xs px-2 leading-normal">
-                        Point any phone camera to download <span className="font-semibold text-slate-800 font-mono">{activeQrFile?.filename}</span> directly.
+                        Point any phone camera to download{" "}
+                        <span className="font-semibold text-slate-800 font-mono">
+                          {activeQrFile?.filename}
+                        </span>{" "}
+                        directly.
                       </DialogDescription>
                     </DialogHeader>
 
@@ -683,11 +724,11 @@ function AppPage() {
                     )}
 
                     <div className="text-[9px] font-mono text-slate-400 truncate max-w-xs mx-auto select-all">
-                      {activeQrFile && `${window.location.origin}?download=${activeQrFile.id}`}
+                      {activeQrFile &&
+                        `${window.location.origin}?download=${activeQrFile.id}`}
                     </div>
                   </DialogContent>
                 </Dialog>
-
               </div>
             </div>
           )}
@@ -699,15 +740,18 @@ function AppPage() {
         <Dialog open={showJoinModal} onOpenChange={setShowJoinModal}>
           <DialogContent className="bg-white border-slate-200 text-slate-900">
             <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">Join Room Manually</DialogTitle>
+              <DialogTitle className="text-sm font-bold text-slate-900">
+                Join Room Manually
+              </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
                 Enter the exact Room ID to sync and access its feed files.
               </DialogDescription>
             </DialogHeader>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!joinRoomId.trim()) return toast.error("Room ID is required");
+                if (!joinRoomId.trim())
+                  return toast.error("Room ID is required");
                 setShowJoinModal(false);
                 setRoomId(joinRoomId.trim());
                 setJoinRoomId("");
@@ -715,9 +759,11 @@ function AppPage() {
               className="space-y-4 text-xs text-slate-750"
             >
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room ID</label>
-                <Input 
-                  type="text" 
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Room ID
+                </label>
+                <Input
+                  type="text"
                   autoFocus
                   placeholder="Enter Room ID"
                   value={joinRoomId}
@@ -726,7 +772,7 @@ function AppPage() {
                 />
               </div>
               <DialogFooter className="flex justify-end space-x-3 pt-2">
-                <Button 
+                <Button
                   type="button"
                   variant="secondary"
                   onClick={() => setShowJoinModal(false)}
@@ -734,7 +780,7 @@ function AppPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   type="submit"
                   className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold cursor-pointer"
                 >
@@ -749,16 +795,23 @@ function AppPage() {
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="bg-white border-slate-200 text-slate-900">
             <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">Edit Room Info</DialogTitle>
+              <DialogTitle className="text-sm font-bold text-slate-900">
+                Edit Room Info
+              </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
                 Change the room name and workspace descriptions shown to guests.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleEditRoomSubmit} className="space-y-4 text-xs text-slate-750">
+            <form
+              onSubmit={handleEditRoomSubmit}
+              className="space-y-4 text-xs text-slate-750"
+            >
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room Name</label>
-                <Input 
-                  type="text" 
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Room Name
+                </label>
+                <Input
+                  type="text"
                   autoFocus
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
@@ -766,8 +819,10 @@ function AppPage() {
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Description</label>
-                <Textarea 
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Description
+                </label>
+                <Textarea
                   rows={2}
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
@@ -775,7 +830,7 @@ function AppPage() {
                 />
               </div>
               <DialogFooter className="flex justify-end space-x-3 pt-2">
-                <Button 
+                <Button
                   type="button"
                   variant="secondary"
                   disabled={isSavingEdit}
@@ -784,7 +839,7 @@ function AppPage() {
                 >
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   type="submit"
                   disabled={isSavingEdit}
                   className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold cursor-pointer min-w-[100px]"
@@ -794,7 +849,9 @@ function AppPage() {
                       <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       Saving...
                     </span>
-                  ) : 'Save Changes'}
+                  ) : (
+                    "Save Changes"
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -810,12 +867,12 @@ function AppPage() {
                 Share Room & Security Settings
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Generate invite options, QR scans, and protect access permissions.
+                Generate invite options, QR scans, and protect access
+                permissions.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-5 text-xs text-slate-750">
-              
               {/* Dynamic QR code section */}
               <div className="flex flex-col items-center space-y-2 bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
                 <img
@@ -823,11 +880,13 @@ function AppPage() {
                   alt="Room QR Code"
                   className="w-36 h-36 rounded-lg"
                 />
-                <span className="text-[10px] text-slate-500 font-medium">Scan QR to join room instantly</span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Scan QR to join room instantly
+                </span>
               </div>
 
               {/* Share Link trigger */}
-              <Button 
+              <Button
                 onClick={handleNativeShare}
                 className="w-full font-semibold cursor-pointer bg-red-500 hover:bg-red-600 text-white"
               >
@@ -836,15 +895,17 @@ function AppPage() {
               </Button>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Invite Link</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Invite Link
+                </label>
                 <div className="flex gap-2">
-                  <Input 
-                    type="text" 
-                    readOnly 
+                  <Input
+                    type="text"
+                    readOnly
                     value={`${window.location.origin}/rooms/${room.id}`}
                     className="flex-grow bg-white border-slate-200 text-slate-800 text-[11px] focus:ring-red-500 focus:border-red-500"
                   />
-                  <Button 
+                  <Button
                     onClick={handleCopyInviteLink}
                     className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer shrink-0"
                   >
@@ -854,15 +915,17 @@ function AppPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Room ID</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Room ID
+                </label>
                 <div className="flex gap-2">
-                  <Input 
-                    type="text" 
-                    readOnly 
+                  <Input
+                    type="text"
+                    readOnly
                     value={room.id}
                     className="flex-grow bg-white border-slate-200 text-slate-800 text-[11px] font-mono focus:ring-red-500 focus:border-red-500"
                   />
-                  <Button 
+                  <Button
                     onClick={handleCopyRoomId}
                     className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer shrink-0"
                   >
@@ -873,23 +936,35 @@ function AppPage() {
 
               {isRoomHost && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-left">Host Security Controls</label>
-                  
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-left">
+                    Host Security Controls
+                  </label>
+
                   {/* Private Room (Stash Key) Checkbox */}
                   <div className="space-y-3 border border-slate-200 bg-slate-50 p-3 rounded-xl">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col text-left">
-                        <span className="text-xs text-slate-800 font-semibold">Private Room (Stash Key)</span>
-                        <span className="text-[10px] text-slate-500">Require guests to input a rotating Stash Key</span>
+                        <span className="text-xs text-slate-800 font-semibold">
+                          Private Room (Stash Key)
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          Require guests to input a rotating Stash Key
+                        </span>
                       </div>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={!!room.is_protected}
                         onChange={async (e) => {
                           const checked = e.target.checked;
-                          const res = await updateRoomSettings(room.id, { is_protected: checked });
+                          const res = await updateRoomSettings(room.id, {
+                            is_protected: checked,
+                          });
                           if (res.success) {
-                            toast.success(checked ? "Room set to Private" : "Private access disabled");
+                            toast.success(
+                              checked
+                                ? "Room set to Private"
+                                : "Private access disabled",
+                            );
                           } else {
                             toast.error("Failed to update Private status");
                           }
@@ -900,12 +975,14 @@ function AppPage() {
                     {room.is_protected && (
                       <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 text-left animate-slideDown">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500 font-medium">Stash Key Pin</span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Stash Key Pin
+                          </span>
                           <span className="text-[11px] font-mono font-bold text-red-500 tracking-widest bg-red-50 px-2 py-0.5 rounded">
                             {room.stack_key || "------"}
                           </span>
                         </div>
-                        <Button 
+                        <Button
                           onClick={handleRotateKey}
                           className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer h-7"
                         >
@@ -919,17 +996,27 @@ function AppPage() {
                   <div className="space-y-3 border border-slate-200 bg-slate-50 p-3 rounded-xl">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col text-left">
-                        <span className="text-xs text-slate-800 font-semibold">Manual Approval (Accept Only)</span>
-                        <span className="text-[10px] text-slate-500">Require host to approve each join request</span>
+                        <span className="text-xs text-slate-800 font-semibold">
+                          Manual Approval (Accept Only)
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          Require host to approve each join request
+                        </span>
                       </div>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         checked={!!room.accept_only}
                         onChange={async (e) => {
                           const checked = e.target.checked;
-                          const res = await updateRoomSettings(room.id, { accept_only: checked });
+                          const res = await updateRoomSettings(room.id, {
+                            accept_only: checked,
+                          });
                           if (res.success) {
-                            toast.success(checked ? "Manual approval enabled" : "Manual approval disabled");
+                            toast.success(
+                              checked
+                                ? "Manual approval enabled"
+                                : "Manual approval disabled",
+                            );
                           } else {
                             toast.error("Failed to update approval mode");
                           }
@@ -941,19 +1028,33 @@ function AppPage() {
                       <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 text-left animate-slideDown">
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
                           Access Requests
-                          <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{requests.length}</span>
+                          <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                            {requests.length}
+                          </span>
                         </span>
                         <ul className="space-y-1.5 max-h-40 overflow-y-auto">
                           {requests.map((req) => (
-                            <li key={req.clientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                            <li
+                              key={req.clientId}
+                              className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
+                            >
                               <div className="flex flex-col truncate pr-2">
-                                <span className="font-semibold text-slate-800 truncate">{req.guestName}</span>
-                                <span className="text-[9px] text-slate-500 font-mono truncate">{req.clientId.substring(0, 10)}...</span>
+                                <span className="font-semibold text-slate-800 truncate">
+                                  {req.guestName}
+                                </span>
+                                <span className="text-[9px] text-slate-500 font-mono truncate">
+                                  {req.clientId.substring(0, 10)}...
+                                </span>
                               </div>
                               <div className="flex gap-1.5">
                                 <Button
                                   size="xs"
-                                  onClick={() => handleApprove(req.clientId, req.guestSocketId)}
+                                  onClick={() =>
+                                    handleApprove(
+                                      req.clientId,
+                                      req.guestSocketId,
+                                    )
+                                  }
                                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
                                 >
                                   Allow
@@ -961,7 +1062,9 @@ function AppPage() {
                                 <Button
                                   size="xs"
                                   variant="destructive"
-                                  onClick={() => handleDeny(req.clientId, req.guestSocketId)}
+                                  onClick={() =>
+                                    handleDeny(req.clientId, req.guestSocketId)
+                                  }
                                   className="text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
                                 >
                                   Deny
@@ -980,16 +1083,25 @@ function AppPage() {
         </Dialog>
 
         {/* 4. Custom Delete Room Modal */}
-        <Dialog open={!!deleteTargetRoomId} onOpenChange={(open) => { if (!isDeleting) setDeleteTargetRoomId(open ? deleteTargetRoomId : null); }}>
+        <Dialog
+          open={!!deleteTargetRoomId}
+          onOpenChange={(open) => {
+            if (!isDeleting)
+              setDeleteTargetRoomId(open ? deleteTargetRoomId : null);
+          }}
+        >
           <DialogContent className="bg-white border-slate-200 text-slate-900">
             <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">Delete Room</DialogTitle>
+              <DialogTitle className="text-sm font-bold text-slate-900">
+                Delete Room
+              </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Are you sure you want to delete this room? This action is permanent and will immediately delete all files from storage.
+                Are you sure you want to delete this room? This action is
+                permanent and will immediately delete all files from storage.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex justify-end space-x-3 pt-2">
-              <Button 
+              <Button
                 variant="secondary"
                 disabled={isDeleting}
                 onClick={() => setDeleteTargetRoomId(null)}
@@ -997,7 +1109,7 @@ function AppPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 variant="destructive"
                 disabled={isDeleting}
                 onClick={async () => {
@@ -1018,23 +1130,35 @@ function AppPage() {
                     <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Deleting...
                   </span>
-                ) : 'Yes, Delete'}
+                ) : (
+                  "Yes, Delete"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* 5. Custom Leave Room Modal */}
-        <Dialog open={!!leaveTargetRoomId} onOpenChange={(open) => { if (!isLeaving) setLeaveTargetRoomId(open ? leaveTargetRoomId : null); }}>
+        <Dialog
+          open={!!leaveTargetRoomId}
+          onOpenChange={(open) => {
+            if (!isLeaving)
+              setLeaveTargetRoomId(open ? leaveTargetRoomId : null);
+          }}
+        >
           <DialogContent className="bg-white border-slate-200 text-slate-900">
             <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">Leave Room</DialogTitle>
+              <DialogTitle className="text-sm font-bold text-slate-900">
+                Leave Room
+              </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Are you sure you want to leave this room? It will be removed from your sidebar list but the room itself will continue to exist.
+                Are you sure you want to leave this room? It will be removed
+                from your sidebar list but the room itself will continue to
+                exist.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex justify-end space-x-3 pt-2">
-              <Button 
+              <Button
                 variant="secondary"
                 disabled={isLeaving}
                 onClick={() => setLeaveTargetRoomId(null)}
@@ -1042,12 +1166,12 @@ function AppPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 disabled={isLeaving}
                 onClick={async () => {
                   setIsLeaving(true);
                   leaveRoomHook(leaveTargetRoomId);
-                  await new Promise(r => setTimeout(r, 400));
+                  await new Promise((r) => setTimeout(r, 400));
                   setIsLeaving(false);
                   setLeaveTargetRoomId(null);
                   toast.success("Left room successfully");
@@ -1059,7 +1183,9 @@ function AppPage() {
                     <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Leaving...
                   </span>
-                ) : 'Yes, Leave'}
+                ) : (
+                  "Yes, Leave"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1068,14 +1194,13 @@ function AppPage() {
         {/* Floating Access / Member Management Panel */}
         {(requests.length > 0 || approvedUsers.length > 0) && (
           <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-4 animate-slideUp text-slate-900 space-y-4">
-            
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                 Room Security Controls
               </span>
-              <button 
+              <button
                 onClick={() => {
                   setRequests([]);
                   setApprovedUsers([]);
@@ -1095,15 +1220,28 @@ function AppPage() {
                 </span>
                 <ul className="space-y-1.5 max-h-32 overflow-y-auto">
                   {requests.map((req) => (
-                    <li key={req.clientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                    <li
+                      key={req.clientId}
+                      className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
+                    >
                       <div className="flex flex-col truncate pr-2 text-left">
-                        <span className="font-semibold text-slate-800 truncate">{req.guestName}</span>
-                        <span className="text-[9px] text-slate-550 font-mono truncate">{req.clientId.substring(0, 10)}...</span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {req.guestName}
+                        </span>
+                        <span className="text-[9px] text-slate-550 font-mono truncate">
+                          {req.clientId.substring(0, 10)}...
+                        </span>
                       </div>
                       <div className="flex gap-1.5 shrink-0">
                         <Button
                           size="xs"
-                          onClick={() => handleApprove(req.clientId, req.guestSocketId, req.guestName)}
+                          onClick={() =>
+                            handleApprove(
+                              req.clientId,
+                              req.guestSocketId,
+                              req.guestName,
+                            )
+                          }
                           className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
                         >
                           Allow
@@ -1111,7 +1249,9 @@ function AppPage() {
                         <Button
                           size="xs"
                           variant="destructive"
-                          onClick={() => handleDeny(req.clientId, req.guestSocketId)}
+                          onClick={() =>
+                            handleDeny(req.clientId, req.guestSocketId)
+                          }
                           className="text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
                         >
                           Deny
@@ -1131,15 +1271,24 @@ function AppPage() {
                 </span>
                 <ul className="space-y-1.5 max-h-32 overflow-y-auto">
                   {approvedUsers.map((user) => (
-                    <li key={user.clientId} className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg">
+                    <li
+                      key={user.clientId}
+                      className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
+                    >
                       <div className="flex flex-col truncate pr-2 text-left">
-                        <span className="font-semibold text-slate-800 truncate">{user.name}</span>
-                        <span className="text-[9px] text-slate-500 font-mono truncate">{user.clientId.substring(0, 10)}...</span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {user.name}
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-mono truncate">
+                          {user.clientId.substring(0, 10)}...
+                        </span>
                       </div>
                       <Button
                         size="xs"
                         variant="destructive"
-                        onClick={() => handleKick(user.clientId, user.socketId, user.name)}
+                        onClick={() =>
+                          handleKick(user.clientId, user.socketId, user.name)
+                        }
                         className="bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-[9px] px-2 py-0.5 cursor-pointer h-6 border border-red-200"
                       >
                         Remove
@@ -1149,7 +1298,6 @@ function AppPage() {
                 </ul>
               </div>
             )}
-
           </div>
         )}
 
@@ -1158,8 +1306,12 @@ function AppPage() {
           <div className="fixed inset-0 bg-white/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-red-500/50 m-4 rounded-3xl pointer-events-none animate-fadeIn">
             <div className="bg-white/80 p-8 rounded-2xl shadow-xl flex flex-col items-center border border-slate-100">
               <Upload className="w-16 h-16 text-red-500 animate-bounce mb-4" />
-              <p className="text-xl font-bold text-slate-800">Drop files anywhere to stash</p>
-              <p className="text-xs text-slate-400 mt-1">Files will be uploaded directly to this room</p>
+              <p className="text-xl font-bold text-slate-800">
+                Drop files anywhere to stash
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                Files will be uploaded directly to this room
+              </p>
             </div>
           </div>
         )}

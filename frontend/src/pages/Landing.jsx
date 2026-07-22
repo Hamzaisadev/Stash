@@ -11,7 +11,6 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import {
   ArrowRight,
-  Layers,
   Upload,
   Users,
   Shield,
@@ -286,8 +285,8 @@ function Landing() {
       >
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-14 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center group-hover:rotate-12 transition-transform duration-300">
-              <Layers className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 shadow-sm flex items-center justify-center transition-transform duration-300 group-hover:scale-[1.03]">
+              <img src="/favicon.svg" alt="Stash logo" className="w-5 h-5" />
             </div>
             <span className="text-lg font-extrabold tracking-tight text-slate-900">
               Stash
@@ -564,8 +563,12 @@ function Landing() {
                 {/* "App" content inside */}
                 <div className="bg-[#0a0a0f] p-6 md:p-10 min-h-[320px] flex flex-col items-center justify-center text-center gap-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-lg bg-red-500 flex items-center justify-center">
-                      <Layers className="w-3.5 h-3.5 text-white" />
+                    <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+                      <img
+                        src="/favicon.svg"
+                        alt="Stash logo"
+                        className="w-4 h-4"
+                      />
                     </div>
                     <span className="text-white font-bold text-sm">
                       my-room
@@ -612,8 +615,12 @@ function Landing() {
                   <div className="rounded-3xl border-2 border-slate-200 bg-white shadow-2xl shadow-slate-900/[0.08] overflow-hidden">
                     <div className="bg-[#0a0a0f] p-4 min-h-[200px] flex flex-col gap-2">
                       <div className="flex items-center gap-1.5 mb-2">
-                        <div className="w-5 h-5 rounded bg-red-500 flex items-center justify-center">
-                          <Layers className="w-2.5 h-2.5 text-white" />
+                        <div className="w-5 h-5 rounded bg-white border border-slate-200 flex items-center justify-center">
+                          <img
+                            src="/favicon.svg"
+                            alt="Stash logo"
+                            className="w-2.5 h-2.5"
+                          />
                         </div>
                         <span className="text-[9px] font-bold text-white">
                           my-room
@@ -745,8 +752,8 @@ function Landing() {
       <footer className="border-t border-slate-100 bg-white py-10 px-6">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-red-500 flex items-center justify-center">
-              <Layers className="w-3.5 h-3.5 text-white" />
+            <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center">
+              <img src="/favicon.svg" alt="Stash logo" className="w-4 h-4" />
             </div>
             <span className="text-[15px] font-extrabold text-slate-900">
               Stash

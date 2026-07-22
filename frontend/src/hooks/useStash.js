@@ -99,6 +99,11 @@ export function useStash() {
     error: null,
   });
   const [downloadProgress, setDownloadProgress] = useState({});
+  const [uploadProgress, setUploadProgress] = useState({
+    status: null,
+    percent: 0,
+    fileName: "",
+  });
   const [clipboard, setClipboard] = useState([]);
   const [gate, setGate] = useState(null);
   const [clientId] = useState(() => generateClientId());
@@ -895,17 +900,53 @@ export function useStash() {
         formData.append("description", options.description);
       }
 
-      const res = await fetch(`${API_BASE}/upload`, {
-        method: "POST",
-        headers: getAuthHeaders(room.id),
-        body: formData,
+      const totalSize = filesArray.reduce(
+        (sum, file) => sum + (file.size || 0),
+        0,
+      );
+      const fileName =
+        filesArray.length === 1
+          ? filesArray[0].name
+          : `${filesArray.length} files`;
+      setUploadProgress({ status: "uploading", percent: 0, fileName });
+
+      const responseText = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_BASE}/upload`, true);
+
+        const headers = getAuthHeaders(room.id);
+        Object.entries(headers).forEach(([key, value]) => {
+          xhr.setRequestHeader(key, value);
+        });
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setUploadProgress({ status: "uploading", percent, fileName });
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(xhr.responseText);
+          } else {
+            let errorMessage = "Upload failed.";
+            try {
+              const errorJson = JSON.parse(xhr.responseText || "{}");
+              errorMessage = errorJson.message || errorMessage;
+            } catch (e) {
+              errorMessage = xhr.responseText || errorMessage;
+            }
+            reject(new Error(errorMessage));
+          }
+        };
+
+        xhr.onerror = () =>
+          reject(new Error("Upload failed due to network error."));
+        xhr.send(formData);
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.message || "Upload failed");
-      }
-
+      const json = JSON.parse(responseText);
       if (json.status === "success" || (json.data && json.data.id)) {
         const fileId = json.data.id;
         const myUploads = JSON.parse(
@@ -914,16 +955,21 @@ export function useStash() {
         myUploads.push(fileId);
         localStorage.setItem("stash_my_uploads", JSON.stringify(myUploads));
 
-        // Persistent Cache: Store single files in IndexedDB for WebRTC seeding
         if (filesArray.length === 1) {
           await saveFileToIndexedDB(fileId, filesArray[0]);
         }
       }
 
       await fetchRoomFiles(room.id);
+      setUploadProgress({ status: "complete", percent: 100, fileName });
+      setTimeout(
+        () => setUploadProgress({ status: null, percent: 0, fileName: "" }),
+        1500,
+      );
       return true;
     } catch (err) {
       setStatus((prev) => ({ ...prev, error: err.message }));
+      setUploadProgress({ status: "error", percent: 0, fileName: "" });
       return false;
     } finally {
       if (isVoice) {
@@ -978,25 +1024,51 @@ export function useStash() {
     }));
 
     try {
-      const res = await fetch(`${API_BASE}/download/${fileId}`, {
-        method: "POST",
-        headers: getAuthHeaders(room.id, true),
-        body: JSON.stringify({ password: filePassword }),
+      const xhrResponse = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_BASE}/download/${fileId}`, true);
+        xhr.responseType = "blob";
+
+        const headers = getAuthHeaders(room.id, true);
+        Object.entries(headers).forEach(([key, value]) => {
+          xhr.setRequestHeader(key, value);
+        });
+
+        xhr.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            setDownloadProgress((prev) => ({
+              ...prev,
+              [fileId]: { status: "cloud", percent },
+            }));
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve({ success: true, blob: xhr.response });
+          } else {
+            let errorText = "Download failed.";
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                const json = JSON.parse(reader.result);
+                reject(new Error(json.message || errorText));
+              } catch (_) {
+                reject(new Error(reader.result || errorText));
+              }
+            };
+            reader.onerror = () => reject(new Error(errorText));
+            reader.readAsText(xhr.response);
+          }
+        };
+
+        xhr.onerror = () =>
+          reject(new Error("Download failed due to network error."));
+        xhr.send(JSON.stringify({ password: filePassword }));
       });
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        let errorMessage = "Download failed.";
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.message;
-        } catch (_) {}
-        throw new Error(errorMessage);
-      }
-
-      const blob = await res.blob();
-      triggerBlobDownload(blob, file.filename);
-
+      triggerBlobDownload(xhrResponse.blob, file.filename);
       setDownloadProgress((prev) => ({
         ...prev,
         [fileId]: { status: "complete", percent: 100 },
@@ -1237,8 +1309,15 @@ export function useStash() {
       });
 
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.message || "Deletion failed");
+        const text = await res.text();
+        let message = "Deletion failed.";
+        try {
+          const json = JSON.parse(text);
+          message = json.message || message;
+        } catch (_) {
+          if (text) message = text;
+        }
+        throw new Error(message);
       }
 
       setRoom((prev) => ({
@@ -1409,6 +1488,7 @@ export function useStash() {
     fetchDefaultRoom,
     fetchRoomDetails,
     refreshFiles: () => fetchRoomFiles(room.id),
+    uploadProgress,
     uploadFile,
     downloadFile,
     deleteFile,

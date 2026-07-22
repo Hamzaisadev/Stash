@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 
-function VoiceRecorder({ onUpload, isUploading }) {
+function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
-  const [barHeights, setBarHeights] = useState([16, 28, 20, 36, 24, 48, 30, 42, 22, 32, 16]);
+  const [barHeights, setBarHeights] = useState([
+    16, 28, 20, 36, 24, 48, 30, 42, 22, 32, 16,
+  ]);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -18,9 +20,10 @@ function VoiceRecorder({ onUpload, isUploading }) {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) {
-        if (audioContextRef.current.state !== 'closed') {
+        if (audioContextRef.current.state !== "closed") {
           audioContextRef.current.close();
         }
       }
@@ -31,7 +34,7 @@ function VoiceRecorder({ onUpload, isUploading }) {
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
   const cleanupVisualizer = () => {
@@ -40,7 +43,7 @@ function VoiceRecorder({ onUpload, isUploading }) {
       animationFrameRef.current = null;
     }
     if (audioContextRef.current) {
-      if (audioContextRef.current.state !== 'closed') {
+      if (audioContextRef.current.state !== "closed") {
         audioContextRef.current.close();
       }
       audioContextRef.current = null;
@@ -55,8 +58,10 @@ function VoiceRecorder({ onUpload, isUploading }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm",
+      });
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -67,24 +72,34 @@ function VoiceRecorder({ onUpload, isUploading }) {
 
       mediaRecorder.onstop = async () => {
         cleanupVisualizer();
-        
+
         // Compile chunks to single webm blob
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
+
         // Generate a custom filename with a timestamp
         const timestamp = Date.now().toString().substring(8);
-        const audioFile = new File([audioBlob], `voice-drop-${timestamp}.webm`, {
-          type: 'audio/webm',
-          lastModified: Date.now()
-        });
+        const audioFile = new File(
+          [audioBlob],
+          `voice-drop-${timestamp}.webm`,
+          {
+            type: "audio/webm",
+            lastModified: Date.now(),
+          },
+        );
 
         // Auto upload the voice clip to the current room
         if (onUpload) {
-          await onUpload(audioFile, { password: '', expiresIn: '20', isVoice: true });
+          await onUpload(audioFile, {
+            password: "",
+            expiresIn: "20",
+            isVoice: true,
+          });
         }
 
         // Release mic resources
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
       };
 
       // Set up Audio Analyser for visualizer
@@ -127,9 +142,8 @@ function VoiceRecorder({ onUpload, isUploading }) {
 
       // Start UI timer ticking
       timerRef.current = setInterval(() => {
-        setRecordTime(prev => prev + 1);
+        setRecordTime((prev) => prev + 1);
       }, 1000);
-
     } catch (err) {
       console.error("Microphone access denied or error:", err);
       alert("Microphone permission is required to drop voice notes.");
@@ -152,10 +166,12 @@ function VoiceRecorder({ onUpload, isUploading }) {
     <div className="flex flex-col items-center justify-between p-8 bg-white border border-slate-200 rounded-2xl shadow-sm animate-scaleUp h-full text-center min-h-[340px]">
       {/* Top Header Section */}
       <div className="text-center text-slate-500 w-full">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Context Voice Note</h4>
+        <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+          Context Voice Note
+        </h4>
         <p className="text-xs text-slate-650 max-w-xs mx-auto leading-normal">
-          {isRecording 
-            ? "Recording live audio... Tap the stop button to save and drop." 
+          {isRecording
+            ? "Recording live audio... Tap the stop button to save and drop."
             : "Drop a voice clip into the sharing feed to explain your files."}
         </p>
       </div>
@@ -170,8 +186,8 @@ function VoiceRecorder({ onUpload, isUploading }) {
               className="w-1 rounded-full transition-[height] duration-75 ease-out"
               style={{
                 height: `${h}px`,
-                backgroundColor: isRecording ? '#ef4444' : '#cbd5e1',
-                transformOrigin: 'center'
+                backgroundColor: isRecording ? "#ef4444" : "#cbd5e1",
+                transformOrigin: "center",
               }}
             />
           ))}
@@ -184,19 +200,34 @@ function VoiceRecorder({ onUpload, isUploading }) {
             onClick={isRecording ? stopRecording : startRecording}
             disabled={isUploading}
             className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 relative focus:outline-none cursor-pointer ${
-              isRecording 
-                ? 'bg-red-500 text-white shadow-lg shadow-red-500/20 scale-105 animate-pulse-soft' 
-                : 'bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 shadow-sm'
+              isRecording
+                ? "bg-red-500 text-white shadow-lg shadow-red-500/20 scale-105 animate-pulse-soft"
+                : "bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 shadow-sm"
             }`}
           >
             {isRecording ? (
               // Stop Icon
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="text-white"
+              >
                 <rect x="4" y="4" width="16" height="16" rx="2" />
               </svg>
             ) : (
               // Mic Icon
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                 <line x1="12" y1="19" x2="12" y2="22" />
@@ -206,7 +237,9 @@ function VoiceRecorder({ onUpload, isUploading }) {
 
           {isRecording && (
             <div className="flex flex-col text-left">
-              <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest animate-pulse">Live</span>
+              <span className="text-[9px] font-bold text-red-500 uppercase tracking-widest animate-pulse">
+                Live
+              </span>
               <span className="text-lg font-bold font-mono text-slate-800 leading-none mt-0.5">
                 {formatTime(recordTime)}
               </span>
@@ -217,11 +250,42 @@ function VoiceRecorder({ onUpload, isUploading }) {
 
       {/* Bottom Status Section */}
       <div className="w-full text-center h-8 flex items-center justify-center">
-        {isUploading ? (
+        {uploadProgress?.status === "uploading" &&
+        uploadProgress.fileName.startsWith("voice-drop-") ? (
+          <div className="w-full space-y-1">
+            <div className="flex items-center justify-between text-[10px] text-slate-600 font-semibold">
+              <span>Uploading voice clip</span>
+              <span>{uploadProgress.percent}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-red-500 transition-all duration-150"
+                style={{ width: `${uploadProgress.percent}%` }}
+              />
+            </div>
+          </div>
+        ) : isUploading ? (
           <span className="text-xs font-semibold text-red-500 tracking-wider animate-pulse flex items-center gap-1.5">
-            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" className="opacity-25" strokeWidth="4"></circle>
-              <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75"></path>
+            <svg
+              className="w-3.5 h-3.5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                className="opacity-25"
+                strokeWidth="4"
+              ></circle>
+              <path
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                className="opacity-75"
+              ></path>
             </svg>
             Stashing voice note...
           </span>
