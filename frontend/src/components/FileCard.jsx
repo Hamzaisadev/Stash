@@ -294,6 +294,7 @@ function FileCard({ file, isOwner, downloadProgress, onDownload, onDelete, onQr,
           </div>
         </div>
       )}
+      </div>
     );
   }
 
