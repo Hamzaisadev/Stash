@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { Globe, Lock, ShieldCheck, Wifi } from 'lucide-react';
 
 export default function GateScreen({ 
     gate, 
     joinRoomWithKey, 
+    joinRemoteRoom,
+    isRemoteRoom,
     requestAccessAcceptOnly,
     fetchRoomDetails
 }) {
@@ -11,6 +14,8 @@ export default function GateScreen({
     const [statusMsg, setStatusMsg] = useState("");
     const [loading, setLoading] = useState(false);
     const [requested, setRequested] = useState(false);
+
+    const isRemote = isRemoteRoom || (typeof gate.room_id === 'string' && gate.room_id.startsWith('remote-'));
 
     useEffect(() => {
         // Listen for approval/denial events
@@ -39,7 +44,10 @@ export default function GateScreen({
         e.preventDefault();
         setLoading(true);
         setStatusMsg("");
-        const res = await joinRoomWithKey(gate.room_id, password);
+        
+        const joinFn = (isRemote && joinRemoteRoom) ? joinRemoteRoom : joinRoomWithKey;
+        const res = await joinFn(gate.room_id, password.trim());
+        
         if (res.success) {
             fetchRoomDetails(gate.room_id);
         } else {
@@ -63,13 +71,36 @@ export default function GateScreen({
         <div className="flex items-center justify-center min-h-screen bg-slate-50 text-slate-800 p-4">
             <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-slate-200 animate-scaleUp">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 text-red-500 mb-4 shadow-sm">
-                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                        </svg>
+                    <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 shadow-sm ${
+                        isRemote ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-500'
+                    }`}>
+                        {isRemote ? (
+                            <Globe className="w-8 h-8" />
+                        ) : (
+                            <Lock className="w-8 h-8" />
+                        )}
                     </div>
-                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Private Room</h2>
-                    <p className="text-slate-500 mt-1.5 text-sm">Room: <span className="font-mono text-slate-700 font-bold">{gate.room_id}</span></p>
+                    
+                    <div className="flex items-center justify-center gap-1.5 mb-2">
+                        {isRemote ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <Globe className="w-3 h-3 text-indigo-500" />
+                                Remote Internet Room
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <Wifi className="w-3 h-3 text-emerald-500" />
+                                Local Network Room
+                            </span>
+                        )}
+                    </div>
+
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+                        {isRemote ? "Protected Remote Room" : "Private Room"}
+                    </h2>
+                    <p className="text-slate-500 mt-1.5 text-sm">
+                        Room ID: <span className="font-mono text-slate-700 font-bold">{gate.room_id}</span>
+                    </p>
                 </div>
 
                 {gate.accept_only && !gate.require_password ? (
@@ -96,30 +127,35 @@ export default function GateScreen({
                     </form>
                 ) : (
                     <form onSubmit={handleJoin} className="space-y-4">
-                        <p className="text-sm text-slate-500 text-center">Enter the room key to join.</p>
+                        <p className="text-sm text-slate-500 text-center">
+                            {isRemote ? "Enter the room password to connect." : "Enter the room passcode / Stash Key to join."}
+                        </p>
                         <div>
                             <input 
-                                type="text"
-                                placeholder="Room Key" 
-                                className="w-full bg-white text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-red-500/55 font-mono tracking-widest text-center border border-slate-200 focus:border-red-500 uppercase font-bold"
+                                type="password"
+                                placeholder="Room Password" 
+                                className="w-full bg-white text-slate-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/55 font-mono tracking-wider text-center border border-slate-200 focus:border-indigo-500 font-bold"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value.toUpperCase())}
+                                onChange={(e) => setPassword(e.target.value)}
                                 required
-                                maxLength={6}
                             />
                         </div>
                         <button 
                             type="submit" 
-                            disabled={loading}
-                            className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-semibold transition-colors shadow-sm cursor-pointer"
+                            disabled={loading || !password.trim()}
+                            className={`w-full text-white py-3 rounded-xl font-semibold transition-colors shadow-sm cursor-pointer ${
+                                isRemote 
+                                    ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                    : 'bg-red-500 hover:bg-red-600'
+                            }`}
                         >
-                            {loading ? 'Verifying...' : 'Unlock'}
+                            {loading ? 'Verifying & Connecting...' : 'Unlock Room'}
                         </button>
                     </form>
                 )}
 
                 {statusMsg && (
-                    <div className={`mt-6 text-center text-sm p-3 rounded-xl border ${statusMsg.includes('Denied') || statusMsg.includes('Incorrect') ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-255 text-slate-650 animate-pulse-soft'}`}>
+                    <div className={`mt-6 text-center text-sm p-3 rounded-xl border ${statusMsg.includes('Denied') || statusMsg.includes('Incorrect') ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600 animate-pulse'}`}>
                         {statusMsg}
                     </div>
                 )}

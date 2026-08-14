@@ -82,6 +82,19 @@ const getFileFromIndexedDB = async (fileId) => {
   }
 };
 
+// ==========================================
+// Multi-STUN ICE Configuration for Internet NAT Traversal
+// ==========================================
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:global.stun.twilio.com:3478" },
+];
+
 export function useStash() {
   // 1. State
   const [room, setRoom] = useState({
@@ -89,6 +102,7 @@ export function useStash() {
     files: [],
     description: "",
     is_protected: false,
+    is_remote: false,
     accept_only: false,
     stack_key: null,
   });
@@ -403,7 +417,7 @@ export function useStash() {
         if (signal.type === "screen-request") {
           // PRESENTER SIDE: Receiver wants our screen capture
           const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            iceServers: ICE_SERVERS,
           });
           screenSharePCs.current[senderId] = pc;
 
@@ -436,7 +450,7 @@ export function useStash() {
         } else if (signal.sdp && signal.sdp.type === "offer") {
           // RECEIVER SIDE: Receive offer from presenter
           const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            iceServers: ICE_SERVERS,
           });
           receiverScreenPC.current = pc;
 
@@ -518,10 +532,10 @@ export function useStash() {
       }
       if (json.status === "success") {
         const rid = json.data.room_id;
-        setRoom((prev) => ({ ...prev, id: rid }));
+        setRoom((prev) => ({ ...prev, id: rid, is_remote: false }));
         setJoinedRooms((prev) => {
           if (prev.find((r) => r.id === rid)) return prev;
-          return [...prev, { id: rid, name: "Stash Default" }];
+          return [...prev, { id: rid, name: "Stash Default", is_remote: false }];
         });
         fetchRoomDetails(rid);
         return { success: true };
@@ -551,43 +565,54 @@ export function useStash() {
           require_password: json.require_password,
           accept_only: json.accept_only,
           room_id: json.room_id,
+          is_remote: typeof roomId === "string" && roomId.startsWith("remote-"),
         });
         return {
           require_password: json.require_password,
           accept_only: json.accept_only,
           room_id: json.room_id,
+          is_remote: typeof roomId === "string" && roomId.startsWith("remote-"),
         };
       }
       if (json.status === "success") {
         const roomInfo = json.data.room;
+        const isRemote =
+          !!roomInfo.is_remote ||
+          (typeof roomInfo.id === "string" && roomInfo.id.startsWith("remote-"));
+
         setRoom((prev) => ({
           ...prev,
           id: roomInfo.id,
           name: roomInfo.name,
           description: roomInfo.description,
           is_protected: roomInfo.is_protected,
+          is_remote: isRemote,
           accept_only: roomInfo.accept_only,
           stack_key: roomInfo.stack_key,
           creator_socket_id: roomInfo.creator_socket_id,
         }));
 
-        // Keep sidebar lists updated with the latest names
+        // Keep sidebar lists updated with the latest names and remote tags
         setJoinedRooms((prev) => {
           const inMyRooms = myRooms.some((r) => r.id === roomInfo.id);
           const inJoinedRooms = prev.some((r) => r.id === roomInfo.id);
           if (inMyRooms) return prev;
           if (inJoinedRooms) {
             return prev.map((r) =>
-              r.id === roomInfo.id ? { ...r, name: roomInfo.name } : r,
+              r.id === roomInfo.id
+                ? { ...r, name: roomInfo.name, is_remote: isRemote }
+                : r,
             );
           }
-          return [...prev, { id: roomInfo.id, name: roomInfo.name }];
+          return [...prev, { id: roomInfo.id, name: roomInfo.name, is_remote: isRemote }];
         });
 
         setMyRooms((prev) => {
           if (prev.some((r) => r.id === roomInfo.id)) {
             return prev.map((r) =>
-              r.id === roomInfo.id ? { ...r, name: roomInfo.name } : r,
+              r.id === roomInfo.id
+                ? { ...r, name: roomInfo.name, is_remote: isRemote }
+                : r,
             );
           }
           return prev;
@@ -596,7 +621,7 @@ export function useStash() {
         // Fetch files for the room now that we are successfully authorized
         fetchRoomFiles(roomInfo.id);
 
-        return { success: true, room: roomInfo };
+        return { success: true, room: { ...roomInfo, is_remote: isRemote } };
       }
       throw new Error(json.message);
     } catch (err) {
@@ -628,12 +653,17 @@ export function useStash() {
       const roomId = roomData.id
         ? roomData.id.trim()
         : Math.random().toString(36).substring(2, 10);
+      const isRemote =
+        !!roomData.is_remote ||
+        (typeof roomId === "string" && roomId.startsWith("remote-"));
+
       const payload = {
         id: roomId,
         name: roomData.name,
         description: roomData.description || "",
-        is_protected: !!roomData.is_protected,
-        accept_only: !!roomData.accept_only,
+        is_protected: isRemote ? true : !!roomData.is_protected,
+        is_remote: isRemote,
+        accept_only: isRemote ? false : !!roomData.accept_only,
         password: roomData.password,
       };
       const res = await fetch(`${API_BASE}/rooms`, {
@@ -655,7 +685,7 @@ export function useStash() {
         // Add to myRooms
         setMyRooms((prev) => [
           ...prev.filter((r) => r.id !== newRoomId),
-          { id: newRoomId, name: json.data.room.name },
+          { id: newRoomId, name: json.data.room.name, is_remote: isRemote },
         ]);
         setRoom((prev) => ({
           ...prev,
@@ -663,13 +693,40 @@ export function useStash() {
           name: json.data.room.name,
           description: json.data.room.description,
           is_protected: json.data.room.is_protected,
+          is_remote: isRemote,
           accept_only: json.data.room.accept_only,
           stack_key: json.data.room.stack_key,
           creator_socket_id: json.data.room.creator_socket_id,
         }));
-        return { success: true, room: json.data.room };
+        return { success: true, room: { ...json.data.room, is_remote: isRemote } };
       }
       throw new Error(json.message);
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+
+  // Additive Helper: Create a Remote Room over the internet with mandatory password
+  const createRemoteRoom = async (roomData) => {
+    try {
+      if (!roomData.password || roomData.password.trim() === "") {
+        return { error: "A secure password is required to create a Remote Room." };
+      }
+      const rawId = roomData.id && roomData.id.trim() !== ""
+        ? roomData.id.trim()
+        : Math.random().toString(36).substring(2, 8);
+      const roomId = rawId.startsWith("remote-") ? rawId : `remote-${rawId}`;
+
+      return await createRoom({
+        ...roomData,
+        id: roomId,
+        name: roomData.name || "Remote Room",
+        description: roomData.description || "Secure Over-the-Internet Stash Room",
+        is_remote: true,
+        is_protected: true,
+        accept_only: false,
+        password: roomData.password.trim(),
+      });
     } catch (err) {
       return { error: err.message };
     }
@@ -680,7 +737,7 @@ export function useStash() {
       const res = await fetch(`${API_BASE}/rooms/${roomId}/join`, {
         method: "POST",
         headers: getAuthHeaders(null, true),
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, stack_key: password }),
       });
       const json = await res.json();
       if (json.status === "success") {
@@ -690,13 +747,37 @@ export function useStash() {
         tokens[roomId] = json.data.token;
         localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
 
+        const isRemote = typeof roomId === "string" && roomId.startsWith("remote-");
         setJoinedRooms((prev) => [
           ...prev.filter((r) => r.id !== roomId),
-          { id: roomId },
+          { id: roomId, is_remote: isRemote },
         ]);
         return { success: true };
       }
       throw new Error(json.message);
+    } catch (err) {
+      return { error: err.message };
+    }
+  };
+
+  // Additive Helper: Join a Remote Room over the internet with Room ID + Password
+  const joinRemoteRoom = async (roomId, password) => {
+    try {
+      if (!roomId || roomId.trim() === "") {
+        return { error: "Room ID is required." };
+      }
+      if (!password || password.trim() === "") {
+        return { error: "Password is required to enter a Remote Room." };
+      }
+      const cleanId = roomId.trim();
+      const res = await joinRoomWithKey(cleanId, password.trim());
+      if (res.success) {
+        setGate(null);
+        setRoomId(cleanId);
+        await fetchRoomDetails(cleanId);
+        return { success: true };
+      }
+      return res;
     } catch (err) {
       return { error: err.message };
     }
@@ -1158,7 +1239,7 @@ export function useStash() {
 
   const handlePeerAvailability = async (fileId, uploaderId) => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: ICE_SERVERS,
     });
     activePeerConnections.current[uploaderId] = pc;
 
@@ -1214,7 +1295,7 @@ export function useStash() {
   const handleIncomingSdp = async (sdp, senderId) => {
     if (sdp.type === "offer") {
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        iceServers: ICE_SERVERS,
       });
       activePeerConnections.current[senderId] = pc;
 
@@ -1473,13 +1554,22 @@ export function useStash() {
     clientId,
     myRooms,
     joinedRooms,
+    isRemoteRoom:
+      !!room.is_remote ||
+      (typeof room.id === "string" && room.id.startsWith("remote-")),
     setRoomId: (id) => {
       const cached = [...myRooms, ...joinedRooms].find((r) => r.id === id);
+      const isRemote =
+        cached?.is_remote !== undefined
+          ? cached.is_remote
+          : typeof id === "string" && id.startsWith("remote-");
+
       setRoom({
         id,
         name: cached ? cached.name : "",
         description: cached ? cached.description : "",
         is_protected: cached ? cached.is_protected : false,
+        is_remote: isRemote,
         accept_only: cached ? cached.accept_only : false,
         stack_key: cached ? cached.stack_key : null,
         files: [],
@@ -1493,9 +1583,11 @@ export function useStash() {
     downloadFile,
     deleteFile,
     createRoom,
+    createRemoteRoom,
     deleteRoom,
     leaveRoom,
     joinRoomWithKey,
+    joinRemoteRoom,
     requestAccessAcceptOnly,
     approveGuest,
     denyGuest,

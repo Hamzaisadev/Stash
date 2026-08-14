@@ -622,12 +622,16 @@ export const deleteFile = async (req, res, next) => {
  */
 export const createRoom = async (req, res, next) => {
     try {
-        const { id, name, description, is_protected, access_mode, accept_only, password } = req.body;
+        const { id, name, description, is_protected, access_mode, accept_only, password, is_remote } = req.body;
         const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         if (!id || !name) {
             return next(new AppError('Room ID and Room Name are required.', 400));
         }
+
+        // For remote rooms, enforce protection and password
+        const isRemoteRoom = !!is_remote || id.startsWith('remote-');
+        const shouldProtect = isRemoteRoom ? true : !!is_protected;
 
         // Limit check: max 5 created rooms per client
         if (host_id && host_id !== 'system') {
@@ -647,31 +651,54 @@ export const createRoom = async (req, res, next) => {
         let stack_key_expires_at = null;
         let accept_only_val = !!accept_only;
 
-        if (is_protected) {
-            if (accept_only_val) {
-                // Manual approval
+        if (shouldProtect) {
+            if (accept_only_val && !isRemoteRoom) {
+                // Manual approval (only for local private rooms if specified)
             } else {
-                // Passcode
-                stack_key = password ? password.trim() : Math.floor(100000 + Math.random() * 900000).toString();
+                // Passcode / Password
+                stack_key = password && password.trim() !== '' 
+                    ? password.trim() 
+                    : Math.floor(100000 + Math.random() * 900000).toString();
                 stack_key_expires_at = Date.now() + 3153600000000;
             }
         }
 
-        const { data, error } = await supabase
-            .from('rooms')
-            .insert([{
-                id: id.trim(),
-                name: name.trim(),
-                description: description ? description.trim() : '',
-                is_protected: !!is_protected,
-                stack_key,
-                stack_key_expires_at,
-                accept_only: accept_only_val,
-                creator_socket_id: host_id,
-                created_at
-            }])
-            .select()
-            .single();
+        const insertPayload = {
+            id: id.trim(),
+            name: name.trim(),
+            description: description ? description.trim() : '',
+            is_protected: shouldProtect,
+            stack_key,
+            stack_key_expires_at,
+            accept_only: accept_only_val,
+            creator_socket_id: host_id,
+            created_at
+        };
+
+        // Try inserting with is_remote; if column doesn't exist in DB schema, fallback gracefully
+        let data, error;
+        try {
+            const resWithRemote = await supabase
+                .from('rooms')
+                .insert([{ ...insertPayload, is_remote: isRemoteRoom }])
+                .select()
+                .single();
+            data = resWithRemote.data;
+            error = resWithRemote.error;
+        } catch (e) {
+            error = e;
+        }
+
+        if (error && error.code !== '23505') {
+            // Retry without is_remote column in case Supabase schema lacks the column
+            const resFallback = await supabase
+                .from('rooms')
+                .insert([insertPayload])
+                .select()
+                .single();
+            data = resFallback.data;
+            error = resFallback.error;
+        }
 
         if (error) {
             if (error.code === '23505') {
@@ -685,7 +712,10 @@ export const createRoom = async (req, res, next) => {
         res.status(201).json({
             status: 'success',
             data: {
-                room: data,
+                room: {
+                    ...data,
+                    is_remote: isRemoteRoom
+                },
                 token
             }
         });
@@ -752,6 +782,7 @@ export const getRoomDetails = async (req, res, next) => {
             name: room.name,
             description: room.description,
             is_protected: room.is_protected,
+            is_remote: !!room.is_remote || (typeof room.id === 'string' && room.id.startsWith('remote-')),
             accept_only: room.accept_only,
             has_stack_key: !!room.stack_key,
             stack_key_expires_at: room.stack_key_expires_at,

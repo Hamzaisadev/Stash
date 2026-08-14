@@ -42,6 +42,10 @@ import {
   Upload,
   Eye,
   EyeOff,
+  Globe,
+  Wifi,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 
 function AppPage() {
@@ -55,6 +59,7 @@ function AppPage() {
     myRooms,
     joinedRooms,
     clientId,
+    isRemoteRoom,
     setRoomId,
     fetchDefaultRoom,
     fetchRoomDetails,
@@ -64,9 +69,11 @@ function AppPage() {
     downloadFile,
     deleteFile,
     createRoom,
+    createRemoteRoom,
     deleteRoom: deleteRoomHook,
     leaveRoom: leaveRoomHook,
     joinRoomWithKey,
+    joinRemoteRoom,
     requestAccessAcceptOnly,
     approveGuest,
     denyGuest,
@@ -351,6 +358,14 @@ function AppPage() {
     toast.success("Room ID copied to clipboard!");
   };
 
+  // Copy Full Remote Invite Helper
+  const handleCopyRemoteInvite = () => {
+    const keyPart = room.stack_key ? `\nPassword: ${room.stack_key}` : "";
+    const inviteText = `Join my Stash Room!\nRoom Name: ${room.name || "Stash Room"}\nRoom ID: ${room.id}${keyPart}\nLink: ${window.location.origin}/rooms/${room.id}`;
+    navigator.clipboard.writeText(inviteText);
+    toast.success("Full invite credentials copied to clipboard!");
+  };
+
   // Handle open Share Modal for a specific room
   const handleOpenShareForRoom = (roomId) => {
     if (room.id !== roomId) {
@@ -474,8 +489,10 @@ function AppPage() {
           myRooms={myRooms}
           joinedRooms={joinedRooms}
           currentRoomId={room.id}
+          isRemoteRoom={isRemoteRoom}
           setRoomId={setRoomId}
           createRoom={createRoom}
+          createRemoteRoom={createRemoteRoom}
           deleteRoom={(id) => setDeleteTargetRoomId(id)}
           leaveRoom={(id) => setLeaveTargetRoomId(id)}
           onOpenJoinModal={() => setShowJoinModal(true)}
@@ -492,6 +509,8 @@ function AppPage() {
             <GateScreen
               gate={gate}
               joinRoomWithKey={joinRoomWithKey}
+              joinRemoteRoom={joinRemoteRoom}
+              isRemoteRoom={isRemoteRoom}
               requestAccessAcceptOnly={requestAccessAcceptOnly}
               fetchRoomDetails={fetchRoomDetails}
             />
@@ -504,10 +523,21 @@ function AppPage() {
                     {/* Mobile hamburger — only visible on small screens */}
                     <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-850 hover:bg-slate-100 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
                     <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
+                      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[140px] sm:max-w-none">
                           {room.name || "stash:default"}
                         </h1>
+                        {isRemoteRoom ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0" title="Connected Over-the-Internet (Encrypted)">
+                            <Globe className="w-3 h-3 text-indigo-500" />
+                            Remote Room
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0" title="Auto-discovered Local WiFi Room">
+                            <Wifi className="w-3 h-3 text-emerald-500" />
+                            Local WiFi
+                          </span>
+                        )}
                         {room.id && room.id !== "undefined" && (
                           <button
                             onClick={() => {
@@ -933,6 +963,41 @@ function AppPage() {
                   </Button>
                 </div>
               </div>
+
+              {room.stack_key && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                    Room Password / Passcode
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      readOnly
+                      value={room.stack_key}
+                      className="flex-grow bg-white border-slate-200 text-slate-800 text-[11px] font-mono font-bold tracking-wider focus:ring-red-500 focus:border-red-500"
+                    />
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard.writeText(room.stack_key);
+                        toast.success("Room password copied to clipboard!");
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer shrink-0"
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={handleCopyRemoteInvite}
+                variant="outline"
+                className="w-full text-xs font-semibold border-indigo-200 text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100/70 cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5" />
+                Copy Full Invite (Link & Password)
+              </Button>
 
               {isRoomHost && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">

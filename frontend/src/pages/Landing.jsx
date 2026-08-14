@@ -192,6 +192,11 @@ function Landing() {
 
   const features = [
     {
+      icon: <Globe className="w-6 h-6" />,
+      title: "Remote Internet Rooms",
+      desc: "Connect and transfer across different WiFi networks globally with encrypted passwords and Multi-STUN NAT traversal.",
+    },
+    {
       icon: <Monitor className="w-6 h-6" />,
       title: "Live Screen & Camera",
       desc: "Show your screen or face live to everyone in the room. One click to go fullscreen.",
@@ -238,9 +243,9 @@ function Landing() {
     },
     {
       icon: <Globe className="w-7 h-7" />,
-      title: "Travel",
-      desc: "Send photos and boarding passes between your phone and a borrowed laptop instantly.",
-      color: "bg-emerald-50 text-emerald-500",
+      title: "Remote & Travel",
+      desc: "Send files between devices anywhere in the world across different internet networks.",
+      color: "bg-indigo-50 text-indigo-500",
     },
     {
       icon: <FileText className="w-7 h-7" />,
@@ -258,6 +263,8 @@ function Landing() {
   ];
 
   const marqueeItems = [
+    "Remote Internet Rooms",
+    "Multi-STUN P2P",
     "No Sign Up",
     "Direct Transfer",
     "Auto Discovery",

@@ -38,7 +38,9 @@ Stash lets users create or auto-derive a room (based on client IP), upload files
 
 Security & behaviors:
 
-- Rooms may be auto-created based on hashed client IPs to support quick local network sharing.
+- Local WiFi rooms are auto-created based on hashed client IPs to support zero-config local network sharing.
+- **Remote Rooms (Over-the-Internet)**: Allows users on completely different networks to connect and share files. Secured with mandatory passwords and authenticated via HMAC access tokens.
+- **Multi-STUN NAT Traversal**: Uses Google, Cloudflare, and Twilio STUN pools for WebRTC P2P direct data channels across firewalls with graceful cloud fallback.
 - Protected rooms support passcodes or manual approval. Access verification uses tokens (`x-room-access-token`) and `x-host-id` headers.
 - Files can be password-protected, have expiration times, and limited download counts.
 
@@ -47,15 +49,18 @@ Security & behaviors:
 - Entry: `frontend/src/main.jsx` and `frontend/src/App.jsx` — simple router that shows `Landing` or `AppPage` depending on path.
 - Main app: `frontend/src/pages/AppPage.jsx` — uses the `useStash` hook for API interactions and Socket.io; supports drag/drop uploads, clipboard sync, screen share, file list, uploading, downloading, and room management.
 - Components: `frontend/src/components/` contains `UploadForm.jsx`, `FileListFeed.jsx`, `FileCard.jsx`, `Sidebar.jsx`, `GateScreen.jsx` and many UI primitives under `frontend/src/components/ui/`.
-- Hooks: `frontend/src/hooks/useStash.js` — centralizes API calls, socket management, and stateful interactions used across the UI.
+- Hooks: `frontend/src/hooks/useStash.js` — centralizes API calls, socket management, Multi-STUN WebRTC, and stateful interactions used across the UI.
 
 Features visible in the UI:
 
+- **Local WiFi vs Remote Internet Room switching** with visual network mode indicators
+- **Create & Join Remote Rooms** with secure password authentication and auto-generated credentials
 - Drag & drop and paste uploads
 - Live file list with upload and download progress
 - Password-protected files and burn-after-read support
 - Room creation, share link copy, manual guest approval
 - Clipboard sync between devices in the same room
+- Live screen and webcam streaming
 
 ## Environment variables
 

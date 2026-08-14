@@ -57,8 +57,8 @@ All HTTP REST endpoints operate under the host address `/api` (dev port `3000`).
 
 | HTTP Method | Endpoint | Headers Required | Request Payload / Params | Response Payload (Success) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **POST** | `/rooms` | `x-host-id` | `body: { id, name, description, is_protected, access_mode }` | `{ status: 'success', data: { room } }` | Creates a new room. Generates initial Stack Key passcode if room is protected. |
-| **GET** | `/rooms/:room_id` | `x-host-id`, `x-room-access-token` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Fetches room parameters. If unauthorized (no token, no host match) and room is protected, returns `403 Forbidden` with room metadata fields. |
+| **POST** | `/rooms` | `x-host-id` | `body: { id, name, description, is_protected, is_remote, password, access_mode }` | `{ status: 'success', data: { room } }` | Creates a new room (Local or Remote). Enforces password protection and `is_remote` flag on Remote Internet Rooms. |
+| **GET** | `/rooms/:room_id` | `x-host-id`, `x-room-access-token` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Fetches room parameters (including `is_remote` status). If unauthorized (no token, no host match) and room is protected, returns `403 Forbidden` with room metadata fields. |
 | **POST** | `/rooms/:room_id/join` | None | `body: { password }` | `{ status: 'success', data: { token } }` | Verifies room key. Returns cryptographic signature token if verified. |
 | **POST** | `/rooms/:room_id/update` | `x-host-id` | `body: { name, description, is_protected, accept_only }` | `{ status: 'success', data: { room } }` | Updates room configurations (e.g., changes name, description, or security mode). |
 | **POST** | `/rooms/:room_id/rotate-key` | `x-host-id` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Forces immediate rotation of the 6-digit room passcode. |
