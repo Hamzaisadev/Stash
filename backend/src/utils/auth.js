@@ -87,6 +87,7 @@ export const checkRoomAccess = async (req, res, next) => {
                     name: room.name,
                     description: room.description,
                     is_protected: room.is_protected,
+                    is_remote: !!room.is_remote || (typeof room.id === 'string' && room.id.startsWith('remote-')),
                     accept_only: room.accept_only,
                     has_stack_key: !!room.stack_key
                 }

@@ -560,19 +560,21 @@ export function useStash() {
         headers: getAuthHeaders(roomId),
       });
       const json = await res.json();
-      if (res.status === 403) {
-        setGate({
-          require_password: json.require_password,
-          accept_only: json.accept_only,
-          room_id: json.room_id,
-          is_remote: typeof roomId === "string" && roomId.startsWith("remote-"),
-        });
-        return {
-          require_password: json.require_password,
-          accept_only: json.accept_only,
-          room_id: json.room_id,
-          is_remote: typeof roomId === "string" && roomId.startsWith("remote-"),
+      if (res.status === 401 || res.status === 403) {
+        const isRemote =
+          !!json.is_remote ||
+          !!json.data?.room?.is_remote ||
+          (typeof roomId === "string" && roomId.startsWith("remote-"));
+        const gateData = {
+          require_password:
+            json.require_password ?? json.data?.room?.is_protected ?? true,
+          accept_only:
+            json.accept_only ?? json.data?.room?.accept_only ?? false,
+          room_id: json.room_id ?? json.data?.room?.id ?? roomId,
+          is_remote: isRemote,
         };
+        setGate(gateData);
+        return gateData;
       }
       if (json.status === "success") {
         const roomInfo = json.data.room;
