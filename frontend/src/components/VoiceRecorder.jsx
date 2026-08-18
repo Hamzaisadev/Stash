@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 
 function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
   const [isRecording, setIsRecording] = useState(false);
@@ -169,7 +169,7 @@ function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
         <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
           Context Voice Note
         </h4>
-        <p className="text-xs text-slate-650 max-w-xs mx-auto leading-normal">
+        <p className="text-xs text-slate-600 max-w-xs mx-auto leading-normal">
           {isRecording
             ? "Recording live audio... Tap the stop button to save and drop."
             : "Drop a voice clip into the sharing feed to explain your files."}

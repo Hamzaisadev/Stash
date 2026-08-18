@@ -1,11 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   motion,
   useScroll,
   useTransform,
   useInView,
   useMotionValueEvent,
-  AnimatePresence,
 } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -17,18 +16,15 @@ import {
   Zap,
   Monitor,
   Smartphone,
-  Video,
   Copy,
   Lock,
   Flame,
   ChevronRight,
   Star,
   FileText,
-  Wifi,
   Send,
   Globe,
   Laptop,
-  Timer,
 } from "lucide-react";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -577,28 +573,31 @@ function Landing() {
                       3 online
                     </span>
                   </div>
-                  {/* Mock file cards */}
+                  {/* Mock file cards. Sizes are fixed, not random: a random value
+                      during render is impure and re-rolls on every re-render. */}
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-w-md">
-                    {["presentation.pdf", "photo-001.jpg", "notes.txt"].map(
-                      (name, i) => (
-                        <motion.div
-                          key={name}
-                          initial={{ opacity: 0, y: 20 }}
-                          whileInView={{ opacity: 1, y: 0 }}
-                          viewport={{ once: true }}
-                          transition={{ delay: 0.3 + i * 0.12 }}
-                          className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-left"
-                        >
-                          <FileText className="w-5 h-5 text-slate-500 mb-1.5" />
-                          <p className="text-[10px] font-semibold text-slate-300 truncate">
-                            {name}
-                          </p>
-                          <p className="text-[8px] text-slate-600 mt-0.5">
-                            {(Math.random() * 5 + 0.5).toFixed(1)} MB
-                          </p>
-                        </motion.div>
-                      ),
-                    )}
+                    {[
+                      { name: "presentation.pdf", size: "4.2" },
+                      { name: "photo-001.jpg", size: "2.8" },
+                      { name: "notes.txt", size: "0.6" },
+                    ].map(({ name, size }, i) => (
+                      <motion.div
+                        key={name}
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ delay: 0.3 + i * 0.12 }}
+                        className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-left"
+                      >
+                        <FileText className="w-5 h-5 text-slate-500 mb-1.5" />
+                        <p className="text-[10px] font-semibold text-slate-300 truncate">
+                          {name}
+                        </p>
+                        <p className="text-[8px] text-slate-600 mt-0.5">
+                          {size} MB
+                        </p>
+                      </motion.div>
+                    ))}
                   </div>
                   <div className="flex items-center gap-2 mt-3">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

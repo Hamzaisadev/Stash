@@ -1,7 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStash } from "../hooks/useStash.js";
-import FileCard from "../components/FileCard.jsx";
+import {
+  filesFromDataTransfer,
+  filesFromClipboard,
+} from "../lib/dropzone.js";
 import VoiceRecorder from "../components/VoiceRecorder.jsx";
+import { useMyUploads } from "../hooks/useMyUploads.js";
 import ScreenShare from "../components/ScreenShare.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import GateScreen from "../components/GateScreen.jsx";
@@ -24,21 +28,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { copyToClipboard } from "@/lib/utils";
 
 import {
   Pencil,
   Share2,
   Trash2,
   AlertCircle,
-  Unlock,
+  Copy,
   Lock,
   QrCode,
-  Copy,
-  ExternalLink,
-  Info,
-  LogOut,
   X,
-  Menu,
   Upload,
   Eye,
   EyeOff,
@@ -81,6 +81,8 @@ function AppPage() {
     stopScreenShare,
   } = useStash();
 
+  const { isOwner: isFileOwner } = useMyUploads();
+
   const isRoomHost =
     room.creator_socket_id === clientId || room.creator_socket_id === "system";
 
@@ -99,11 +101,14 @@ function AppPage() {
   const [requests, setRequests] = useState([]);
   const [approvedUsers, setApprovedUsers] = useState([]);
 
-  // Reset access requests and approved list on room changes
-  useEffect(() => {
+  // Reset access requests and approved list on room changes. Done during
+  // render rather than in an effect so the stale list is never painted.
+  const [prevRoomId, setPrevRoomId] = useState(room.id);
+  if (prevRoomId !== room.id) {
+    setPrevRoomId(room.id);
     setRequests([]);
     setApprovedUsers([]);
-  }, [room.id]);
+  }
 
   const [deleteTargetRoomId, setDeleteTargetRoomId] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -117,10 +122,13 @@ function AppPage() {
   const [downloadError, setDownloadError] = useState(null);
   const [activeQrFile, setActiveQrFile] = useState(null);
 
-  // Reset password visibility when unlock target changes
-  useEffect(() => {
+  // Reset password visibility when the unlock target changes. Derived during
+  // render instead of in an effect to avoid a cascading re-render.
+  const [prevUnlockingFile, setPrevUnlockingFile] = useState(unlockingFile);
+  if (prevUnlockingFile !== unlockingFile) {
+    setPrevUnlockingFile(unlockingFile);
     setShowUnlockPassword(false);
-  }, [unlockingFile]);
+  }
 
   // Ask for notification permissions on lobby load
   useEffect(() => {
@@ -186,6 +194,16 @@ function AppPage() {
   const [isDraggingPage, setIsDraggingPage] = useState(false);
   const dragCounter = useRef(0);
 
+  // useStash returns fresh function identities every render. Holding the latest
+  // in refs lets the global drag/drop and paste listeners register exactly once
+  // instead of being torn down and re-added on every render.
+  const uploadFileRef = useRef(uploadFile);
+  const sendClipboardRef = useRef(sendClipboard);
+  useEffect(() => {
+    uploadFileRef.current = uploadFile;
+    sendClipboardRef.current = sendClipboard;
+  });
+
   useEffect(() => {
     const handleDragEnter = (e) => {
       e.preventDefault();
@@ -211,52 +229,18 @@ function AppPage() {
       dragCounter.current = 0;
       setIsDraggingPage(false);
 
-      const items = e.dataTransfer.items;
-      if (items && items.length > 0) {
-        const allFiles = [];
-        const entries = [];
+      const files = await filesFromDataTransfer(e.dataTransfer);
+      if (files.length === 0) return;
 
-        for (let i = 0; i < items.length; i++) {
-          const entry = items[i].webkitGetAsEntry?.();
-          if (entry) entries.push(entry);
-        }
-
-        const readAllEntries = async (entry) => {
-          if (entry.isFile) {
-            return new Promise((resolve) => {
-              entry.file((f) => resolve([f]));
-            });
-          } else if (entry.isDirectory) {
-            const dirReader = entry.createReader();
-            const entries = await new Promise((resolve) => {
-              dirReader.readEntries((results) => resolve(results));
-            });
-            const allFiles = [];
-            for (const child of entries) {
-              const childFiles = await readAllEntries(child);
-              allFiles.push(...childFiles);
-            }
-            return allFiles;
-          }
-          return [];
-        };
-
-        if (entries.length > 0) {
-          for (const entry of entries) {
-            const files = await readAllEntries(entry);
-            allFiles.push(...files);
-          }
-        }
-
-        if (allFiles.length > 0) {
-          uploadFile(allFiles);
-          toast.success(`Stashing ${allFiles.length} dropped item(s)`);
-        } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          const files = Array.from(e.dataTransfer.files);
-          uploadFile(files);
-          toast.success(`Stashing ${files.length} dropped item(s)`);
-        }
-      }
+      // Report the real outcome: uploadFile resolves false on failure.
+      toast.promise(uploadFileRef.current(files), {
+        loading: `Stashing ${files.length} item(s)...`,
+        success: (ok) =>
+          ok
+            ? `Stashed ${files.length} item(s)`
+            : Promise.reject(new Error("Upload failed")),
+        error: "Upload failed. Please try again.",
+      });
     };
 
     window.addEventListener("dragenter", handleDragEnter);
@@ -270,7 +254,9 @@ function AppPage() {
       window.removeEventListener("dragleave", handleDragLeave);
       window.removeEventListener("drop", handleDrop);
     };
-  }, [uploadFile]);
+    // Registered once. The handler reads the latest uploadFile through a ref,
+    // because useStash returns a new function identity on every render.
+  }, []);
 
   // Ctrl+V Paste event handler
   useEffect(() => {
@@ -281,35 +267,33 @@ function AppPage() {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable;
 
-      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      let hasFile = false;
-      const filesToUpload = [];
+      const clipboardData = e.clipboardData || e.originalEvent?.clipboardData;
+      const filesToUpload = filesFromClipboard(clipboardData);
 
-      for (const item of items) {
-        if (item.kind === "file") {
-          const file = item.getAsFile();
-          if (file) {
-            filesToUpload.push(file);
-            hasFile = true;
-          }
-        }
-      }
-
-      if (hasFile && filesToUpload.length > 0) {
+      if (filesToUpload.length > 0) {
         e.preventDefault();
-        toast.promise(uploadFile(filesToUpload), {
-          loading: `Uploading pasted file: ${filesToUpload[0].name}...`,
-          success: `Pasted file "${filesToUpload[0].name}" stashed successfully!`,
+        const label =
+          filesToUpload.length === 1
+            ? `"${filesToUpload[0].name}"`
+            : `${filesToUpload.length} files`;
+
+        // uploadFile resolves false on failure, so reject to trigger the error toast.
+        toast.promise(uploadFileRef.current(filesToUpload), {
+          loading: `Uploading pasted ${label}...`,
+          success: (ok) =>
+            ok
+              ? `Pasted ${label} stashed`
+              : Promise.reject(new Error("Upload failed")),
           error: "Failed to upload pasted file.",
         });
         return;
       }
 
       if (!isInput) {
-        const text = e.clipboardData.getData("text");
+        const text = clipboardData?.getData("text");
         if (text && text.trim()) {
           e.preventDefault();
-          sendClipboard(text.trim());
+          sendClipboardRef.current(text.trim());
           toast.success("Synced text clipboard to room!");
         }
       }
@@ -317,39 +301,58 @@ function AppPage() {
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [uploadFile, sendClipboard]);
+  }, []);
 
-  // URL Interception for QR code scans
+  // Initiate download checks
+  const handleDownloadInitiation = (file) => {
+    if (file.is_locked) {
+      setUnlockingFile(file);
+      setUnlockPassword("");
+      setDownloadError(null);
+    } else {
+      downloadFile(file);
+    }
+  };
+
+  // URL Interception for QR code scans.
+  // The download is kicked off from a microtask so the state updates it makes
+  // land outside the effect body rather than cascading synchronously. The ref
+  // guard keeps a re-render of room.files from re-triggering the same download.
+  const handledDownloadParam = useRef(false);
   useEffect(() => {
+    if (handledDownloadParam.current) return;
+
     const params = new URLSearchParams(window.location.search);
     const downloadId = params.get("download");
+    if (!downloadId || room.files.length === 0) return;
 
-    if (downloadId && room.files.length > 0) {
-      const file = room.files.find((f) => f.id === downloadId);
-      if (file) {
-        handleDownloadInitiation(file);
-        // Clean URL query
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname,
-        );
-      }
-    }
+    const file = room.files.find((f) => f.id === downloadId);
+    if (!file) return;
+
+    handledDownloadParam.current = true;
+    // Clean URL query
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    queueMicrotask(() => handleDownloadInitiation(file));
+    // handleDownloadInitiation is intentionally omitted: the ref guard above
+    // makes this run exactly once, so re-subscribing on every render is noise.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.files]);
 
-  // Copy Room Link Helper
-  const handleCopyInviteLink = () => {
-    const inviteLink = `${window.location.origin}/rooms/${room.id}`;
-    navigator.clipboard.writeText(inviteLink);
-    toast.success("Invite link copied to clipboard!");
+  // Copy helpers. Report failure instead of always claiming success —
+  // clipboard writes reject on insecure origins and when the doc isn't focused.
+  const copyOrWarn = async (text, label) => {
+    if (await copyToClipboard(text)) {
+      toast.success(`${label} copied to clipboard!`);
+    } else {
+      toast.error(`Couldn't copy automatically — select the ${label} to copy it.`);
+    }
   };
 
-  // Copy Room ID Helper
-  const handleCopyRoomId = () => {
-    navigator.clipboard.writeText(room.id);
-    toast.success("Room ID copied to clipboard!");
-  };
+  const handleCopyInviteLink = () =>
+    copyOrWarn(`${window.location.origin}/rooms/${room.id}`, "Invite link");
+
+  const handleCopyRoomId = () => copyOrWarn(room.id, "Room ID");
 
   // Handle open Share Modal for a specific room
   const handleOpenShareForRoom = (roomId) => {
@@ -436,17 +439,6 @@ function AppPage() {
     }
   };
 
-  // Initiate download checks
-  const handleDownloadInitiation = (file) => {
-    if (file.is_locked) {
-      setUnlockingFile(file);
-      setUnlockPassword("");
-      setDownloadError(null);
-    } else {
-      downloadFile(file);
-    }
-  };
-
   // Locked files submit unlock password
   const handleUnlockSubmit = async () => {
     const result = await downloadFile(unlockingFile, unlockPassword);
@@ -461,11 +453,18 @@ function AppPage() {
     }
   };
 
-  // Qr codes server URL for files
-  const getQrCodeUrl = (fileId) => {
-    const link = `${window.location.origin}?download=${fileId}`;
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=ef4444&bgcolor=ffffff&data=${encodeURIComponent(link)}`;
-  };
+  // Qr codes server URL for files.
+  // Room-scoped: a bare `?download=<id>` lands the scanner in *their* default
+  // room, where the file doesn't exist and the download silently never fires.
+  const getFileShareLink = (fileId) =>
+    `${window.location.origin}/rooms/${room.id}?download=${fileId}`;
+
+  // qzone=2 adds the quiet zone scanners need; without it phone cameras
+  // often fail to lock on. Size matches the rendered box to avoid rescaling.
+  const getQrCodeUrl = (fileId) =>
+    `https://api.qrserver.com/v1/create-qr-code/?size=320x320&qzone=2&color=ef4444&bgcolor=ffffff&data=${encodeURIComponent(
+      getFileShareLink(fileId),
+    )}`;
 
   return (
     <SidebarProvider>
@@ -502,7 +501,7 @@ function AppPage() {
                 <header className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 sm:pb-4 sm:mb-6 text-left animate-fadeIn">
                   <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                     {/* Mobile hamburger — only visible on small screens */}
-                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-850 hover:bg-slate-100 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
+                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
                     <div className="flex flex-col min-w-0">
                       <div className="flex items-center gap-1.5 sm:gap-2">
                         <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
@@ -589,6 +588,8 @@ function AppPage() {
                         onQr={setActiveQrFile}
                         fetchPreviewUrl={fetchPreviewUrl}
                         refreshFiles={refreshFiles}
+                        isOwner={isFileOwner}
+                        isLoading={status.isLoading}
                       />
                     </div>
                   )}
@@ -662,7 +663,7 @@ function AppPage() {
                         onClick={() =>
                           setShowUnlockPassword(!showUnlockPassword)
                         }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                         title={
                           showUnlockPassword ? "Hide password" : "Show password"
                         }
@@ -723,10 +724,27 @@ function AppPage() {
                       </div>
                     )}
 
-                    <div className="text-[9px] font-mono text-slate-400 truncate max-w-xs mx-auto select-all">
-                      {activeQrFile &&
-                        `${window.location.origin}?download=${activeQrFile.id}`}
-                    </div>
+                    {activeQrFile && (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="text-[11px] font-mono text-slate-500 truncate max-w-xs mx-auto select-all">
+                          {getFileShareLink(activeQrFile.id)}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() =>
+                            copyOrWarn(
+                              getFileShareLink(activeQrFile.id),
+                              "Download link",
+                            )
+                          }
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy link
+                        </Button>
+                      </div>
+                    )}
                   </DialogContent>
                 </Dialog>
               </div>
@@ -756,7 +774,7 @@ function AppPage() {
                 setRoomId(joinRoomId.trim());
                 setJoinRoomId("");
               }}
-              className="space-y-4 text-xs text-slate-750"
+              className="space-y-4 text-xs text-slate-700"
             >
               <div className="space-y-1">
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
@@ -804,7 +822,7 @@ function AppPage() {
             </DialogHeader>
             <form
               onSubmit={handleEditRoomSubmit}
-              className="space-y-4 text-xs text-slate-750"
+              className="space-y-4 text-xs text-slate-700"
             >
               <div className="space-y-1">
                 <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
@@ -872,7 +890,7 @@ function AppPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5 text-xs text-slate-750">
+            <div className="space-y-5 text-xs text-slate-700">
               {/* Dynamic QR code section */}
               <div className="flex flex-col items-center space-y-2 bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
                 <img
@@ -1228,7 +1246,7 @@ function AppPage() {
                         <span className="font-semibold text-slate-800 truncate">
                           {req.guestName}
                         </span>
-                        <span className="text-[9px] text-slate-550 font-mono truncate">
+                        <span className="text-[9px] text-slate-500 font-mono truncate">
                           {req.clientId.substring(0, 10)}...
                         </span>
                       </div>

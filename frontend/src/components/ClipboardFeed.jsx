@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { Send, Copy, Check, Trash2 } from 'lucide-react';
+import { copyToClipboard } from '@/lib/utils';
 
 export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard, isRoomHost }) {
   const [clipboardText, setClipboardText] = useState("");
@@ -17,8 +18,11 @@ export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard
     setClipboardText("");
   };
 
-  const handleCopyText = (text, index) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyText = async (text, index) => {
+    if (!(await copyToClipboard(text))) {
+      toast.error("Couldn't copy — select the text to copy it manually.");
+      return;
+    }
     toast.success("Copied to clipboard!");
     setCopiedId(index);
     setTimeout(() => setCopiedId(null), 1500);
@@ -74,7 +78,7 @@ export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard
               className={`flex items-start justify-between text-xs p-3 rounded-xl border transition-all ${
                 item.fromRemote 
                   ? 'bg-red-50 border-red-100 text-red-700' 
-                  : 'bg-slate-50 border-slate-205 text-slate-700'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}
             >
               <span className="break-all font-mono leading-relaxed select-all cursor-text text-left flex-grow">
@@ -82,7 +86,7 @@ export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard
               </span>
               <button
                 onClick={() => handleCopyText(item.text, i)}
-                className="ml-3 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-750 transition-colors flex-shrink-0 cursor-pointer"
+                className="ml-3 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors flex-shrink-0 cursor-pointer"
                 title="Copy clip"
               >
                 {copiedId === i ? (

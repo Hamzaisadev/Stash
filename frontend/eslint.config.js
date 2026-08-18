@@ -18,4 +18,13 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
   },
+  {
+    // shadcn/ui primitives are generated files that intentionally export
+    // variant definitions (cva) and hooks alongside their components.
+    // Splitting them would diverge from upstream for no runtime benefit.
+    files: ['src/components/ui/**/*.jsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

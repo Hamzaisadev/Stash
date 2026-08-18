@@ -1,18 +1,63 @@
 @import "tailwindcss";
-
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap");
-
 @import "tw-animate-css";
-
-@import "shadcn/tailwind.css";
-
 @import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
+  /* NOTE: --font-sans is redefined in the `@theme inline` block near the bottom
+     of this file, where it resolves to "Geist Variable". That later definition
+     wins. Kept here as the documented fallback chain. */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Type scale — two steps BELOW Tailwind's `xs`. We deliberately do not
+     override --text-xs / --text-sm because components/ui/button.jsx depends
+     on their stock values. Replaces the arbitrary text-[9px]/[10px]/[11px]/[13px]. */
+  --text-3xs: 0.625rem; /* 10px — uppercase micro-labels only */
+  --text-3xs--line-height: 0.875rem;
+  --text-3xs--letter-spacing: 0.06em;
+  --text-2xs: 0.6875rem; /* 11px — metadata, counts, badges */
+  --text-2xs--line-height: 1rem;
+
+  /* Brand accent — semantic aliases for the red used across the app.
+     Literal oklch values (Tailwind's own red scale), not var() indirection. */
+  --color-brand-50: oklch(0.971 0.013 17.38);
+  --color-brand-100: oklch(0.936 0.032 17.717);
+  --color-brand-200: oklch(0.885 0.062 18.334);
+  --color-brand-500: oklch(0.637 0.237 25.331);
+  --color-brand-600: oklch(0.577 0.245 27.325);
+
+  /* Layout — replaces the hard 672px (max-w-2xl) content cap */
+  --container-content: 88rem; /* 1408px → max-w-content */
+}
+
+/* Repeated-pattern utilities. Each of these appeared 10+ times as a literal
+   class string across AppPage/Sidebar/UploadForm/ClipboardFeed/VoiceRecorder. */
+@utility label-eyebrow {
+  @apply text-3xs font-bold uppercase tracking-widest text-slate-400;
+}
+
+@utility surface {
+  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+}
+
+@utility surface-inset {
+  @apply rounded-lg border border-slate-200 bg-slate-50;
+}
+
+@utility focus-brand {
+  @apply outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/40;
+}
+
+/* Row actions revealed on hover. Touch devices cannot hover, so the actions
+   must be permanently visible there or they are unreachable. */
+@utility actions-reveal {
+  @apply opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100;
+
+  @media (hover: none) {
+    opacity: 1;
+  }
 }
 
 /* Base layer */
@@ -65,6 +110,17 @@ body {
   from {
     opacity: 0;
     transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -131,6 +187,26 @@ body {
 }
 .animate-recording {
   animation: recording-pulse 1.5s ease-in-out infinite;
+}
+.animate-slideUp {
+  animation: slideUp 0.3s ease-out both;
+}
+
+/* Respect users who disable motion. The grain texture on the landing page is
+   decorative; disabling it is safe. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .grain::before {
+    animation: none;
+  }
 }
 
 /* Stagger animations */

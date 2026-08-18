@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { 
-  Monitor, 
-  Video, 
-  VideoOff, 
-  Mic, 
+import { useEffect, useRef, useState } from 'react';
+import {
+  Monitor,
+  Video,
+  Mic,
   MicOff, 
   Maximize2, 
   Minimize2, 
@@ -17,9 +16,15 @@ import { toast } from 'sonner';
 
 function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onStartWebcam, onStop }) {
   const videoRef = useRef(null);
-  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [focusModeRequested, setFocusModeRequested] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isVolumeMuted, setIsVolumeMuted] = useState(false);
+
+  // Focus mode only applies while something is actually on screen. Derived
+  // rather than reset from an effect, which would cause a cascading render.
+  const hasStream = isSharing || Boolean(remoteStream);
+  const isFocusMode = focusModeRequested && hasStream;
+  const setIsFocusMode = setFocusModeRequested;
 
   // Bind local/remote stream to video tag srcObject
   useEffect(() => {
@@ -33,13 +38,6 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
       }
     }
   }, [isSharing, stream, remoteStream]);
-
-  // Turn off focus mode if sharing stops
-  useEffect(() => {
-    if (!isSharing && !remoteStream) {
-      setIsFocusMode(false);
-    }
-  }, [isSharing, remoteStream]);
 
   // Toggle Microphone Track
   const toggleMic = () => {
@@ -119,7 +117,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {remoteStream && (
           <button
             onClick={toggleVolume}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${isVolumeMuted ? 'bg-red-550/15 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${isVolumeMuted ? 'bg-red-500/15 border-red-200 text-red-500' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
             title={isVolumeMuted ? "Unmute Audio" : "Mute Audio"}
           >
             {isVolumeMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -130,7 +128,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {isSharing && (
           <button
             onClick={shareType === 'screen' ? onStartWebcam : onStart}
-            className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 transition-all cursor-pointer"
+            className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
             title={shareType === 'screen' ? "Switch to Webcam Share" : "Switch to Screen Share"}
           >
             {shareType === 'screen' ? <Video className="w-4 h-4 text-red-500" /> : <Monitor className="w-4 h-4 text-red-500" />}
@@ -141,7 +139,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {isSharing && (
           <button
             onClick={onStop}
-            className="p-2 rounded-xl bg-red-500 hover:bg-red-650 border border-red-500 text-white transition-all cursor-pointer"
+            className="p-2 rounded-xl bg-red-500 hover:bg-red-600 border border-red-500 text-white transition-all cursor-pointer"
             title="Stop Sharing"
           >
             <Square className="w-4 h-4 fill-white" />
@@ -160,7 +158,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {/* Fullscreen Trigger */}
         <button
           onClick={toggleFullscreen}
-          className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 transition-all cursor-pointer"
+          className="p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
           title="Fullscreen"
         >
           <Maximize2 className="w-4 h-4" />
@@ -176,7 +174,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
         {/* Close/Exit Focus Page button on top right */}
         <button 
           onClick={() => setIsFocusMode(false)}
-          className="absolute top-6 right-6 p-2 rounded-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-550 hover:text-slate-800 transition-all cursor-pointer z-20 shadow-sm"
+          className="absolute top-6 right-6 p-2 rounded-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 transition-all cursor-pointer z-20 shadow-sm"
           title="Exit Focus Page"
         >
           <X className="w-5 h-5" />
@@ -193,7 +191,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
   return (
     <div className="w-full bg-white border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center space-y-5 shadow-sm animate-scaleUp">
       <div className="text-center text-slate-500">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-red-550 mb-1">Live Call & Screen Share</h4>
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-red-500 mb-1">Live Call & Screen Share</h4>
         <p className="text-xs max-w-md leading-normal mx-auto text-slate-400">
           {isSharing 
             ? `You are currently casting your ${shareType === 'webcam' ? 'camera' : 'screen'} stream to this room.` 
@@ -214,7 +212,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
           <button
             type="button"
             onClick={onStart}
-            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-650 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
+            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-600 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
           >
             <div className="p-3 bg-red-50 rounded-full text-red-500 group-hover:scale-110 transition-transform duration-300 mb-3 shadow-inner">
               <Monitor className="w-6 h-6" />
@@ -227,7 +225,7 @@ function ScreenShare({ isSharing, stream, remoteStream, shareType, onStart, onSt
           <button
             type="button"
             onClick={onStartWebcam}
-            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-650 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
+            className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 hover:border-red-300 hover:bg-red-50/10 text-slate-600 hover:text-slate-800 rounded-2xl cursor-pointer transition-all duration-300 shadow-sm group"
           >
             <div className="p-3 bg-red-50 rounded-full text-red-500 group-hover:scale-110 transition-transform duration-300 mb-3 shadow-inner">
               <Video className="w-6 h-6" />

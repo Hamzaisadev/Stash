@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   Sidebar as ShadcnSidebar,
@@ -97,7 +97,7 @@ export default function Sidebar({
       } else {
         toast.error(res.error || "Failed to create room.");
       }
-    } catch (err) {
+    } catch {
       toast.error("An unexpected error occurred.");
     } finally {
       setIsSubmitting(false);
@@ -157,7 +157,7 @@ export default function Sidebar({
                     className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer ${
                       activeMode === item.id
                         ? "bg-red-500 hover:bg-red-600 text-white font-semibold shadow-sm"
-                        : "text-slate-650 hover:bg-slate-100 hover:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     }`}
                   >
                     <span
@@ -226,7 +226,7 @@ export default function Sidebar({
                     className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
                       currentRoomId === r.id
                         ? "bg-slate-100 text-slate-900 font-semibold rounded-xl"
-                        : "text-slate-655 hover:text-slate-900"
+                        : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     <span className="truncate flex-1 pr-12">
@@ -261,7 +261,7 @@ export default function Sidebar({
                 </SidebarMenuItem>
               ))}
               {myRooms.length === 0 && (
-                <li className="px-2.5 py-1 text-[11px] text-slate-450">
+                <li className="px-2.5 py-1 text-[11px] text-slate-400">
                   No rooms created yet.
                 </li>
               )}
@@ -288,7 +288,7 @@ export default function Sidebar({
                       className={`flex-grow text-left px-2.5 py-2 text-xs truncate flex items-center gap-2 cursor-pointer transition-colors ${
                         currentRoomId === r.id
                           ? "bg-slate-100 text-slate-900 font-semibold rounded-xl"
-                          : "text-slate-655 hover:text-slate-900"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
                     >
                       <span className="truncate flex-1 pr-12">
@@ -345,7 +345,7 @@ export default function Sidebar({
           </DialogHeader>
           <form
             onSubmit={handleCreateRoomSubmit}
-            className="space-y-4 text-xs text-slate-750"
+            className="space-y-4 text-xs text-slate-700"
           >
             {/* Room Name */}
             <div className="space-y-1">
@@ -398,7 +398,7 @@ export default function Sidebar({
               </span>
 
               {/* Private Checkbox */}
-              <div className="flex items-center justify-between border border-slate-100 bg-slate-55/60 p-2.5 rounded-xl">
+              <div className="flex items-center justify-between border border-slate-100 bg-slate-50/60 p-2.5 rounded-xl">
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-semibold text-slate-800">
                     Private Room
@@ -418,7 +418,7 @@ export default function Sidebar({
               {/* Password field shown if private is checked */}
               {isProtected && (
                 <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 text-left animate-slideDown">
-                  <label className="text-[10px] text-slate-450 font-bold uppercase tracking-wider block">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                     Custom Access Pin / Passcode
                   </label>
                   <Input
@@ -427,13 +427,13 @@ export default function Sidebar({
                     placeholder="e.g. MYPIN1 (optional, auto-generated if blank)"
                     value={passcode}
                     onChange={(e) => setPasscode(e.target.value)}
-                    className="bg-white border-slate-200 text-slate-805 text-xs focus:ring-red-500 focus:border-red-500 uppercase font-mono tracking-widest text-center"
+                    className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500 uppercase font-mono tracking-widest text-center"
                   />
                 </div>
               )}
 
               {/* Manual approval Checkbox */}
-              <div className="flex items-center justify-between border border-slate-100 bg-slate-55/60 p-2.5 rounded-xl">
+              <div className="flex items-center justify-between border border-slate-100 bg-slate-50/60 p-2.5 rounded-xl">
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-semibold text-slate-800">
                     Manual Host Approval

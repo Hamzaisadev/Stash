@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function GateScreen({ 
     gate, 
@@ -119,7 +119,7 @@ export default function GateScreen({
                 )}
 
                 {statusMsg && (
-                    <div className={`mt-6 text-center text-sm p-3 rounded-xl border ${statusMsg.includes('Denied') || statusMsg.includes('Incorrect') ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-255 text-slate-650 animate-pulse-soft'}`}>
+                    <div className={`mt-6 text-center text-sm p-3 rounded-xl border ${statusMsg.includes('Denied') || statusMsg.includes('Incorrect') ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-600 animate-pulse-soft'}`}>
                         {statusMsg}
                     </div>
                 )}

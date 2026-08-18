@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+stach.db
+*.db
+uploads/*
+!uploads/.gitkeep

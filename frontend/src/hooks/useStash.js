@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
+import { notifyUploadsChanged } from "./useMyUploads.js";
 
 const serverIP = window.location.hostname;
 const PROD_BACKEND_URL =
@@ -15,10 +16,33 @@ const SOCKET_BASE = import.meta.env.PROD
 const generateClientId = () => {
   let id = localStorage.getItem("stash_client_id");
   if (!id) {
-    id = "client_" + Math.random().toString(36).substr(2, 9) + Date.now();
+    id =
+      "client_" +
+      (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 11)) +
+      Date.now();
     localStorage.setItem("stash_client_id", id);
   }
   return id;
+};
+
+/** Read a persisted room list, tolerating corrupted localStorage. */
+const readRoomList = (key) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Read the room access-token map, tolerating corrupted localStorage. */
+const readTokens = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("stash_room_tokens") || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 };
 
 const getAuthHeaders = (roomId = null, isJson = false) => {
@@ -27,9 +51,7 @@ const getAuthHeaders = (roomId = null, isJson = false) => {
     headers["Content-Type"] = "application/json";
   }
   if (roomId) {
-    const tokens = JSON.parse(
-      localStorage.getItem("stash_room_tokens") || "{}",
-    );
+    const tokens = readTokens();
     if (tokens[roomId]) headers["x-room-access-token"] = tokens[roomId];
   }
   return headers;
@@ -82,7 +104,7 @@ const getFileFromIndexedDB = async (fileId) => {
   }
 };
 
-export function useStash() {
+export function useStash(routeRoomId = null) {
   // 1. State
   const [room, setRoom] = useState({
     id: "",
@@ -107,12 +129,19 @@ export function useStash() {
   const [clipboard, setClipboard] = useState([]);
   const [gate, setGate] = useState(null);
   const [clientId] = useState(() => generateClientId());
-  const [myRooms, setMyRooms] = useState(() =>
-    JSON.parse(localStorage.getItem("stash_my_rooms") || "[]"),
-  );
+  const [myRooms, setMyRooms] = useState(() => readRoomList("stash_my_rooms"));
   const [joinedRooms, setJoinedRooms] = useState(() =>
-    JSON.parse(localStorage.getItem("stash_joined_rooms") || "[]"),
+    readRoomList("stash_joined_rooms"),
   );
+
+  // Mirrored into refs so the route-driven effect can read the cached room
+  // metadata without re-running whenever either list changes.
+  const myRoomsRef = useRef(myRooms);
+  const joinedRoomsRef = useRef(joinedRooms);
+  useEffect(() => {
+    myRoomsRef.current = myRooms;
+    joinedRoomsRef.current = joinedRooms;
+  });
 
   useEffect(() => {
     localStorage.setItem("stash_my_rooms", JSON.stringify(myRooms));
@@ -254,9 +283,7 @@ export function useStash() {
     });
 
     socket.on("join-approved", ({ token, roomId }) => {
-      const tokens = JSON.parse(
-        localStorage.getItem("stash_room_tokens") || "{}",
-      );
+      const tokens = readTokens();
       tokens[roomId] = token;
       localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
 
@@ -281,9 +308,7 @@ export function useStash() {
     });
 
     socket.on("room-kicked", ({ roomId }) => {
-      const tokens = JSON.parse(
-        localStorage.getItem("stash_room_tokens") || "{}",
-      );
+      const tokens = readTokens();
       delete tokens[roomId];
       localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
 
@@ -488,9 +513,14 @@ export function useStash() {
 
     return () => {
       if (socket) socket.disconnect();
+      // Reading .current at teardown is deliberate: we must close whatever
+      // connections exist when the hook unmounts, not the (empty) set that
+      // existed when the effect ran. Copying to a local would leak sockets.
+      /* eslint-disable react-hooks/exhaustive-deps */
       Object.values(activePeerConnections.current).forEach((pc) => pc.close());
       Object.values(screenSharePCs.current).forEach((pc) => pc.close());
       if (receiverScreenPC.current) receiverScreenPC.current.close();
+      /* eslint-enable react-hooks/exhaustive-deps */
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Socket created once — room joining is handled separately via join-room emit
@@ -618,7 +648,7 @@ export function useStash() {
       if (json.status === "success") {
         setRoom((prev) => ({ ...prev, files: json.data.files }));
       }
-    } catch (err) {
+    } catch {
       setStatus((prev) => ({ ...prev, error: "Failed to fetch room files." }));
     }
   };
@@ -646,9 +676,7 @@ export function useStash() {
         const newRoomId = json.data.room.id;
 
         // Store token
-        const tokens = JSON.parse(
-          localStorage.getItem("stash_room_tokens") || "{}",
-        );
+        const tokens = readTokens();
         tokens[newRoomId] = json.data.token;
         localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
 
@@ -684,9 +712,7 @@ export function useStash() {
       });
       const json = await res.json();
       if (json.status === "success") {
-        const tokens = JSON.parse(
-          localStorage.getItem("stash_room_tokens") || "{}",
-        );
+        const tokens = readTokens();
         tokens[roomId] = json.data.token;
         localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
 
@@ -806,39 +832,37 @@ export function useStash() {
     }
   };
 
-  // Load default room on mount (with friendly URL routing under /rooms/:room_id)
+  // Resolve which room to load. Driven by the route param: at "/" there is no
+  // param, so we fall back to the IP-derived default room. The hook no longer
+  // writes to the URL — the router owns navigation, which is what fixes the
+  // old pushState/popstate desync and the broken back button.
   useEffect(() => {
-    const path = window.location.pathname;
-    if (path.startsWith("/rooms/")) {
-      const rid = decodeURIComponent(path.substring(7));
-      if (rid && rid.trim() !== "" && rid !== "undefined") {
-        const cached = [...myRooms, ...joinedRooms].find((r) => r.id === rid);
-        setRoom((prev) => ({
-          ...prev,
-          id: rid,
-          name: cached ? cached.name : "",
-          description: cached ? cached.description : "",
-          is_protected: cached ? cached.is_protected : false,
-          accept_only: cached ? cached.accept_only : false,
-          stack_key: cached ? cached.stack_key : null,
-        }));
-        fetchRoomDetails(rid);
-        return;
-      }
+    const rid = routeRoomId?.trim();
+    if (rid && rid !== "undefined") {
+      const cached = [...myRoomsRef.current, ...joinedRoomsRef.current].find(
+        (r) => r.id === rid,
+      );
+      setRoom((prev) =>
+        prev.id === rid
+          ? prev
+          : {
+              ...prev,
+              id: rid,
+              files: [],
+              name: cached ? cached.name : "",
+              description: cached ? cached.description : "",
+              is_protected: cached ? cached.is_protected : false,
+              accept_only: cached ? cached.accept_only : false,
+              stack_key: cached ? cached.stack_key : null,
+            },
+      );
+      return;
     }
     fetchDefaultRoom();
-  }, []);
-
-  // Sync room.id with browser URL path address bar
-  useEffect(() => {
-    if (room.id) {
-      const currentPath = window.location.pathname;
-      const expectedPath = `/rooms/${room.id}`;
-      if (currentPath !== expectedPath) {
-        window.history.pushState({}, "", expectedPath);
-      }
-    }
-  }, [room.id]);
+    // fetchDefaultRoom and the room lists are read through refs to keep this
+    // effect keyed purely on the route param.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeRoomId]);
 
   const joinRoomChannel = useCallback(() => {
     if (socketRef.current && room.id) {
@@ -850,26 +874,28 @@ export function useStash() {
         clientId: generateClientId(),
         isHost,
       });
-      console.log("Emitted join-room:", room.id, "isHost:", isHost);
     }
   }, [room.id, room.creator_socket_id]);
 
-  // Join room on Socket and fetch its files + details whenever room.id changes
+  // Load the room whenever its id changes. fetchRoomDetails already calls
+  // fetchRoomFiles internally, so this is one chain — previously the mount
+  // effect and this one both fetched details AND files, firing ~4 requests
+  // per room open, each triggering a server-side expiry sweep.
   useEffect(() => {
     if (!room.id) return;
-    fetchRoomFiles(room.id);
     fetchRoomDetails(room.id).then((res) => {
       if (res && res.room) {
         joinRoomChannel();
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id, joinRoomChannel]);
 
   // 5. File Upload (with folder support)
-  const uploadFile = async (selectedFiles, options) => {
+  const uploadFile = async (selectedFiles, options = {}) => {
     if (!selectedFiles) return;
 
-    const isVoice = options?.isVoice || false;
+    const isVoice = options.isVoice || false;
     if (isVoice) {
       setStatus((prev) => ({ ...prev, isVoiceUploading: true, error: null }));
     } else {
@@ -891,8 +917,8 @@ export function useStash() {
       }
 
       formData.append("room_id", room.id);
-      formData.append("password", options.password);
-      formData.append("expires_in", options.expiresIn);
+      formData.append("password", options.password ?? "");
+      formData.append("expires_in", options.expiresIn ?? "1440");
       if (options.maxDownloads) {
         formData.append("max_downloads", options.maxDownloads);
       }
@@ -900,10 +926,6 @@ export function useStash() {
         formData.append("description", options.description);
       }
 
-      const totalSize = filesArray.reduce(
-        (sum, file) => sum + (file.size || 0),
-        0,
-      );
       const fileName =
         filesArray.length === 1
           ? filesArray[0].name
@@ -934,7 +956,7 @@ export function useStash() {
             try {
               const errorJson = JSON.parse(xhr.responseText || "{}");
               errorMessage = errorJson.message || errorMessage;
-            } catch (e) {
+            } catch {
               errorMessage = xhr.responseText || errorMessage;
             }
             reject(new Error(errorMessage));
@@ -954,6 +976,7 @@ export function useStash() {
         );
         myUploads.push(fileId);
         localStorage.setItem("stash_my_uploads", JSON.stringify(myUploads));
+        notifyUploadsChanged();
 
         if (filesArray.length === 1) {
           await saveFileToIndexedDB(fileId, filesArray[0]);
@@ -1054,7 +1077,7 @@ export function useStash() {
               try {
                 const json = JSON.parse(reader.result);
                 reject(new Error(json.message || errorText));
-              } catch (_) {
+              } catch {
                 reject(new Error(reader.result || errorText));
               }
             };
@@ -1314,7 +1337,7 @@ export function useStash() {
         try {
           const json = JSON.parse(text);
           message = json.message || message;
-        } catch (_) {
+        } catch {
           if (text) message = text;
         }
         throw new Error(message);
@@ -1330,6 +1353,7 @@ export function useStash() {
       );
       const updatedUploads = myUploads.filter((id) => id !== fileId);
       localStorage.setItem("stash_my_uploads", JSON.stringify(updatedUploads));
+      notifyUploadsChanged();
 
       return true;
     } catch (err) {
@@ -1364,7 +1388,10 @@ export function useStash() {
       if (json.status === "success") {
         return json.data.url;
       }
-    } catch (_) {}
+    } catch (err) {
+      // Preview is best-effort: the card falls back to a type icon.
+      console.warn("Preview URL fetch failed:", err);
+    }
     return null;
   };
 

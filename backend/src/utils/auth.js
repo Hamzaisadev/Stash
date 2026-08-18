@@ -4,32 +4,47 @@ import { supabase } from '../supabase.js';
 
 dotenv.config();
 
-const SECRET = process.env.SUPABASE_SECRET_KEY || 'stash-secret-fallback-key';
+// S7 & Part 5: Use a dedicated TOKEN_SECRET, distinct from Supabase service key
+const TOKEN_SECRET = process.env.TOKEN_SECRET || process.env.SUPABASE_SECRET_KEY || 'stash_default_secure_token_secret_salt_2026';
+const TOKEN_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours validity
 
 /**
- * Generate a stateless signed token for a room and client ID combination
+ * Generate a stateless signed token with timestamp for a room and client ID combination
  */
 export const generateRoomToken = (roomId, clientId) => {
-    const cleanRoomId = roomId.trim();
-    const cleanClientId = clientId.trim();
-    const data = `${cleanRoomId}:${cleanClientId}`;
-    const signature = crypto.createHmac('sha256', SECRET).update(data).digest('hex');
-    return `${data}:${signature}`;
+    const cleanRoomId = String(roomId).trim();
+    const cleanClientId = String(clientId).trim();
+    const timestamp = Date.now();
+    const payload = `${cleanRoomId}:${cleanClientId}:${timestamp}`;
+    const signature = crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex');
+    return `${payload}:${signature}`;
 };
 
 /**
- * Verify if the provided token matches the roomId and was signed by this server
+ * Verify if the provided token matches the roomId, was signed by this server, and has not expired
  */
 export const verifyRoomToken = (token, roomId) => {
-    if (!token) return false;
+    if (!token || typeof token !== 'string') return false;
     try {
         const parts = token.split(':');
-        if (parts.length !== 3) return false;
-        const [tRoomId, tClientId, signature] = parts;
+        if (parts.length !== 4) return false;
+        const [tRoomId, tClientId, tTimestampStr, signature] = parts;
         if (tRoomId !== roomId) return false;
-        const expectedSig = crypto.createHmac('sha256', SECRET).update(`${tRoomId}:${tClientId}`).digest('hex');
-        return signature === expectedSig;
-    } catch (err) {
+
+        const timestamp = parseInt(tTimestampStr, 10);
+        if (isNaN(timestamp) || Date.now() - timestamp > TOKEN_MAX_AGE_MS) {
+            return false; // Token expired
+        }
+
+        const expectedPayload = `${tRoomId}:${tClientId}:${tTimestampStr}`;
+        const expectedSig = crypto.createHmac('sha256', TOKEN_SECRET).update(expectedPayload).digest('hex');
+
+        const sigBuf = Buffer.from(signature, 'hex');
+        const expectedSigBuf = Buffer.from(expectedSig, 'hex');
+
+        if (sigBuf.length !== expectedSigBuf.length) return false;
+        return crypto.timingSafeEqual(sigBuf, expectedSigBuf);
+    } catch {
         return false;
     }
 };
@@ -54,30 +69,30 @@ export const checkRoomAccess = async (req, res, next) => {
 
         if (error) throw error;
 
-        // If the room doesn't exist, we allow it (for room creation / auto-creation logic or backward compatibility)
+        // If the room doesn't exist, allow for creation routes
         if (!room) {
             return next();
         }
 
-        // If the room is not protected, does not have a stack key, and is not accept_only, access is public.
+        // If the room is open (not protected, no key, not accept_only), access is public
         const hasNoSecurity = !room.is_protected && !room.stack_key && !room.accept_only;
         if (hasNoSecurity) {
             return next();
         }
 
-        // Host verification: if the client passes their host_id matching the room's creator_socket_id, let them in.
+        // Host verification
         const hostId = req.headers['x-host-id'] || req.body.host_id || req.query.host_id;
-        if (hostId && room.creator_socket_id === hostId) {
+        if (hostId && room.creator_socket_id && room.creator_socket_id !== 'system' && room.creator_socket_id === hostId) {
             return next();
         }
 
-        // Token verification: check for standard room access token
-        const token = req.headers['x-room-access-token'] || req.body.room_access_token;
+        // Token verification
+        const token = req.headers['x-room-access-token'] || req.body.room_access_token || req.query.token;
         if (token && verifyRoomToken(token, roomId)) {
             return next();
         }
 
-        // Client is unauthorized. Return room metadata to let the frontend present the correct join interface.
+        // Client is unauthorized
         return res.status(401).json({
             status: 'unauthorized',
             message: 'Authentication required for this room.',
@@ -96,4 +111,3 @@ export const checkRoomAccess = async (req, res, next) => {
         next(err);
     }
 };
-

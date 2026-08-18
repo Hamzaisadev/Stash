@@ -1,7 +1,9 @@
-import React, { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { formatBytes } from "@/lib/format";
+import { filesFromDataTransfer } from "@/lib/dropzone";
 import {
   Upload,
   ChevronDown,
@@ -31,15 +33,6 @@ export default function UploadForm({
 
   const fileInputRef = useRef(null);
 
-  const formatBytes = (bytes, decimals = 1) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
-  };
-
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -50,54 +43,13 @@ export default function UploadForm({
     }
   };
 
-  const readAllEntries = async (entry) => {
-    if (entry.isFile) {
-      return new Promise((resolve) => {
-        entry.file((f) => resolve([f]));
-      });
-    } else if (entry.isDirectory) {
-      const dirReader = entry.createReader();
-      const entries = await new Promise((resolve) => {
-        dirReader.readEntries((results) => resolve(results));
-      });
-      const allFiles = [];
-      for (const child of entries) {
-        const childFiles = await readAllEntries(child);
-        allFiles.push(...childFiles);
-      }
-      return allFiles;
-    }
-    return [];
-  };
-
   const handleDrop = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
 
-    const items = e.dataTransfer.items;
-    if (items && items.length > 0) {
-      const allFiles = [];
-      const entries = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const entry = items[i].webkitGetAsEntry?.();
-        if (entry) entries.push(entry);
-      }
-
-      if (entries.length > 0) {
-        for (const entry of entries) {
-          const files = await readAllEntries(entry);
-          allFiles.push(...files);
-        }
-      }
-
-      if (allFiles.length > 0) {
-        setFiles(allFiles);
-      } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        setFiles(Array.from(e.dataTransfer.files));
-      }
-    }
+    const dropped = await filesFromDataTransfer(e.dataTransfer);
+    if (dropped.length > 0) setFiles(dropped);
   };
 
   const handleFileSelect = (e) => {
@@ -195,7 +147,7 @@ export default function UploadForm({
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center justify-between w-full text-[10px] uppercase tracking-wider font-bold text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+            className="flex items-center justify-between w-full text-[10px] uppercase tracking-wider font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
           >
             <span className="flex items-center gap-1">Advanced Settings</span>
             {showAdvanced ? (
@@ -217,7 +169,7 @@ export default function UploadForm({
                   type="button"
                   onClick={() => setBurnAfterDownload(!burnAfterDownload)}
                   className={`relative inline-flex h-4.5 w-8.5 items-center rounded-full transition-colors duration-300 focus:outline-none cursor-pointer ${
-                    burnAfterDownload ? "bg-orange-550" : "bg-slate-200"
+                    burnAfterDownload ? "bg-orange-500" : "bg-slate-200"
                   }`}
                 >
                   <span
@@ -241,7 +193,7 @@ export default function UploadForm({
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Optional note / description about this file"
-                  className="bg-white border-slate-200 text-slate-850 text-xs focus:ring-red-500 focus:border-red-500"
+                  className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500"
                 />
               </div>
 
@@ -257,12 +209,12 @@ export default function UploadForm({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Optional decryption password"
-                    className="bg-white border-slate-200 text-slate-850 text-xs pr-10 focus:ring-red-500 focus:border-red-500"
+                    className="bg-white border-slate-200 text-slate-800 text-xs pr-10 focus:ring-red-500 focus:border-red-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650 transition-colors cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                     title={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
@@ -283,7 +235,7 @@ export default function UploadForm({
                 <select
                   value={expiresIn}
                   onChange={(e) => setExpiresIn(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none text-slate-650 focus:border-red-500 cursor-pointer"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs outline-none text-slate-600 focus:border-red-500 cursor-pointer"
                 >
                   <option value="5">5 Minutes</option>
                   <option value="20">20 Minutes</option>
@@ -304,7 +256,7 @@ export default function UploadForm({
                     onChange={(e) => setMaxDownloads(e.target.value)}
                     placeholder="e.g. 5 (Optional)"
                     min="1"
-                    className="bg-white border-slate-200 text-slate-855 text-xs focus:ring-red-500 focus:border-red-500"
+                    className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500"
                   />
                 </div>
               )}

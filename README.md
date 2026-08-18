@@ -1,153 +1,118 @@
-# Stash
+<div align="center">
 
-Stash is a lightweight file sharing and collaboration web app for quickly stashing files (EPUBs, images, video, archives) to a short-lived room. It provides a Vite + React frontend and an Express + Socket.io backend that stores metadata in Supabase (Postgres + S3-compatible storage) and uses SQLite for local metadata utilities.
+# ⚡ Stash
 
-## Table of contents
+**Instant, zero-login file sharing, live screen casting, and real-time clipboard sync across all your devices.**
 
-- Overview
-- Architecture
-- Backend (what's included)
-- Frontend (what's included)
-- Environment variables
-- Local development
-- API routes
-- Deployment and Docker
-- Contributing & next steps
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-stash--ed.vercel.app-6366f1?style=for-the-badge&logo=vercel&logoColor=white)](https://stash-ed.vercel.app)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+
+[**Try Stash Now →**](https://stash-ed.vercel.app)
+
+<br />
+
+</div>
 
 ---
 
-## Overview
+## ✨ What is Stash?
 
-Stash lets users create or auto-derive a room (based on client IP), upload files to that room, share invite links, and collaborate in real-time via WebSockets. Files are uploaded from the browser (drag & drop, paste, file select) and stored in Supabase storage; metadata and room records live in Supabase Postgres. The backend also exposes preview signed URLs and supports password-protected files and download limits.
+**Stash** is your instant drop-zone for files, text, voice notes, and screen streams. No sign-ups, no installations, and no friction.
 
-## Architecture
+Whether you need to quickly send a photo from your phone to your PC, share code snippets across machines in real-time, or present your screen to a colleague, Stash lets you jump into an ephemeral room and get it done in seconds.
 
-- Backend: `backend/` — Express server in `backend/src`, Socket.io signaling, upload handling with `multer` (in-memory), Supabase client integration, and a lightweight SQLite helper at `backend/src/db.js` for on-disk state.
-- Frontend: `frontend/` — Vite + React application in `frontend/src` (components, pages, hooks). Uses `socket.io-client` for realtime features and supports drag/drop and paste uploads.
-- Storage: Supabase Storage bucket named `stash-files` (configured in `backend/src/supabase.js`).
-- Local uploads: the repository includes an `uploads/` folder with sample EPUB files.
+---
 
-## Backend — key files and behavior
+## 🚀 Key Features
 
-- Entry: `backend/src/server.js` — Express app with Socket.io initialization, request injection of `io` on `req`, global error handler, and `/api` mount for routes.
-- Routes: `backend/src/routes.js` — endpoints for rooms, file listing, upload, preview, download, and deletion.
-- Upload handling: `backend/src/upload.js` — `multer` configured to use memory storage (uploads available in `req.file.buffer` / `req.files[*].buffer`).
-- Supabase client: `backend/src/supabase.js` — reads `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from env and instantiates the client.
-- DB utilities: `backend/src/db.js` — initializes an SQLite DB at `backend/stach.db` and provides lightweight helpers `dbRun`, `dbGet`, and `dbAll`.
-- Controllers: `backend/src/controller.js` — core business logic: creating rooms, uploading files (single or multi-file zipped), generating signed preview URLs, secure download flow, burn-after-read semantics, and room cleanup.
+### 📁 Instant File Sharing & Drop-Zone
+- **Drag & Drop / Paste**: Drop any file format—images, videos, PDFs, archives, or ebooks—or just paste directly from your clipboard.
+- **Fast Transfers**: Direct peer-to-peer transfers for blazing-fast local device handoffs, backed by secure cloud storage when peers are offline.
+- **In-Browser Previews**: Listen to audio files, view images, and inspect files without downloading them first.
 
-Security & behaviors:
+### 📋 Live Synced Clipboard
+- Copy text, links, or code snippets on one device and see it appear instantly on every connected screen in the room.
+- Clear or update the clipboard with a single click.
 
-- Rooms may be auto-created based on hashed client IPs to support quick local network sharing.
-- Protected rooms support passcodes or manual approval. Access verification uses tokens (`x-room-access-token`) and `x-host-id` headers.
-- Files can be password-protected, have expiration times, and limited download counts.
+### 🖥️ 1-Click Screen & Camera Casting
+- Broadcast your screen, browser tab, or webcam directly to everyone in your room with real-time WebRTC streaming.
+- No third-party meeting software or plugins required.
 
-## Frontend — key files and behavior
+### 🎙️ Quick Voice Memos
+- Record voice notes right from your browser and stash them directly into the room for your peers or your other devices.
 
-- Entry: `frontend/src/main.jsx` and `frontend/src/App.jsx` — simple router that shows `Landing` or `AppPage` depending on path.
-- Main app: `frontend/src/pages/AppPage.jsx` — uses the `useStash` hook for API interactions and Socket.io; supports drag/drop uploads, clipboard sync, screen share, file list, uploading, downloading, and room management.
-- Components: `frontend/src/components/` contains `UploadForm.jsx`, `FileListFeed.jsx`, `FileCard.jsx`, `Sidebar.jsx`, `GateScreen.jsx` and many UI primitives under `frontend/src/components/ui/`.
-- Hooks: `frontend/src/hooks/useStash.js` — centralizes API calls, socket management, and stateful interactions used across the UI.
+### 🔒 Privacy-First & Ephemeral Control
+- **Burn After Download**: Set files to self-destruct immediately after being downloaded once.
+- **Timed Expiry**: Files automatically expire and clean themselves up—no leftover digital clutter.
+- **Room Protection**: Lock rooms with a 6-digit access pin or enable host approval (lobby mode) to control who gets in.
+- **Local Network Auto-Discovery**: Automatically find and connect to devices on the same Wi-Fi/network without typing room codes.
 
-Features visible in the UI:
+---
 
-- Drag & drop and paste uploads
-- Live file list with upload and download progress
-- Password-protected files and burn-after-read support
-- Room creation, share link copy, manual guest approval
-- Clipboard sync between devices in the same room
+## 💡 Common Everyday Use Cases
 
-## Environment variables
+| Scenario | How Stash Solves It |
+| :--- | :--- |
+| **Phone ⇄ PC Transfer** | Open Stash on both devices, drag a photo or PDF, and grab it immediately without messaging yourself on chat apps. |
+| **Live Code & Text Sharing** | Paste code blocks or links into the shared clipboard during pair programming or team calls. |
+| **Quick Live Presentations** | Start a screen share in a private room to quickly show a bug or mockup without scheduling a video call. |
+| **Sensitive One-Time Sends** | Share confidential files using **Burn-after-download** and password protection so nothing lingers on the web. |
 
-Create a `.env` file in the `backend/` folder with the following minimum variables:
+---
 
-- `SUPABASE_URL` — Supabase project URL
-- `SUPABASE_SECRET_KEY` — Service/anon key with storage and DB permissions
-- `PORT` — (optional) port for backend server (default: `5000`)
+## 🎯 How to Use Stash
 
-Example `.env` contents:
+1. **Visit [stash-ed.vercel.app](https://stash-ed.vercel.app)** on any browser (Desktop, Mobile, Tablet).
+2. **Create or Join a Room**: Pick a custom room name, join a private room with a PIN, or let Stash discover your local network room.
+3. **Collaborate & Share**: Drag files in, paste text into the synced clipboard, record audio, or start a live screen stream.
+4. **Share the Link**: Send your room link or 6-digit PIN to anyone you want to invite!
 
-```
-SUPABASE_URL=https://xyzcompany.supabase.co
-SUPABASE_SECRET_KEY=your-supabase-service-role-key
-PORT=5000
-```
+---
 
-Notes: `backend/src/supabase.js` will exit the process if `SUPABASE_URL` or `SUPABASE_SECRET_KEY` are missing.
+<details>
+<summary>🛠️ <b>Self-Hosting & Local Development</b> (Click to expand)</summary>
 
-## Local development
+<br />
 
-1. From project root, install dependencies:
+If you'd like to run or self-host your own instance of Stash:
 
+### Prerequisites
+- Node.js (v18+)
+- Supabase account (for database & storage bucket)
+
+### 1. Clone the repository
 ```bash
+git clone https://github.com/Hamzaisadev/Stash.git
+cd Stash
+```
+
+### 2. Configure Backend Environment
+Create a `.env` file in the `backend/` directory:
+```env
+PORT=5000
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-supabase-service-key
+```
+
+### 3. Install & Run
+```bash
+# Install backend dependencies
 cd backend
 npm install
+npm run dev
 
+# In a separate terminal, install and run frontend
 cd ../frontend
 npm install
-```
-
-2. Start backend in watch mode (server restarts on changes):
-
-```bash
-cd backend
 npm run dev
 ```
 
-3. Start frontend (Vite dev server):
+Open `http://localhost:5173` in your browser.
 
-```bash
-cd frontend
-npm run dev
-```
-
-4. Open the frontend URL shown by Vite (typically `http://localhost:5173`).
-
-## API routes (summary)
-
-All routes are mounted under `/api` by default in `server.js`.
-
-- POST `/api/rooms` — create a room
-- GET `/api/rooms/:room_id` — get room details
-- POST `/api/rooms/:room_id/join` — join room with key
-- POST `/api/rooms/:room_id/update` — update settings
-- POST `/api/rooms/:room_id/rotate-key` — rotate access key
-- DELETE `/api/rooms/:room_id` — delete room
-- GET `/api/room` — resolve client room id (auto-create local room)
-- GET `/api/files/:room_id` — list files in a room (requires access check middleware)
-- POST `/api/upload` — multipart upload (field: `files`)
-- GET `/api/preview/:id` — signed preview URL
-- POST `/api/download/:id` — download file (password in body if required)
-- DELETE `/api/files/:id` — delete file
-
-Refer to `backend/src/routes.js` and `backend/src/controller.js` for full behavior and header-based auth fields: `x-room-access-token` and `x-host-id`.
-
-## Deployment & Docker
-
-- A `backend/Dockerfile` is included for containerizing the backend. Ensure environment variables are injected into the container at runtime (e.g., via Docker secrets or env file).
-- For production, use Supabase (or any S3-compatible storage + Postgres) and secure your `SUPABASE_SECRET_KEY`.
-
-## Contributing & next steps
-
-- Add a `.env.example` file listing the required env vars.
-- Add automated tests for backend controllers and route behavior.
-- Add CI workflow for linting and builds for frontend and backend.
-- Consider adding migration scripts for Supabase DB schema or a SQL file with required `rooms` and `files` tables.
-
-## Where to look in the codebase
-
-- Backend entry: `backend/src/server.js`
-- Routes: `backend/src/routes.js`
-- Upload handling: `backend/src/upload.js`
-- Supabase client: `backend/src/supabase.js`
-- Controllers/business logic: `backend/src/controller.js`
-- Frontend entry: `frontend/src/main.jsx` and `frontend/src/App.jsx`
-- Frontend main page: `frontend/src/pages/AppPage.jsx`
+</details>
 
 ---
 
-If you want, I can:
+## 📄 License
 
-- Add a `.env.example` file to the repository.
-- Create a `CONTRIBUTING.md` with development guidelines.
-- Add a short API example demonstrating uploading a file via `curl`.
+Stash is open-source software licensed under the [MIT License](LICENSE).
