@@ -1,7 +1,7 @@
 import express from 'express';
 import upload from './upload.js';
 import { checkRoomAccess } from './utils/auth.js';
-import { authLimiter } from './server.js';
+import { authLimiter } from './utils/limiter.js';
 import {
     uploadFile,
     getFiles,

@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import http from "http";
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import { globalLimiter } from "./utils/limiter.js";
 import { Server } from "socket.io";
 import filesRoutes from './routes.js';
 import { globalErrorHandler } from "./utils/errors.js";
@@ -22,23 +22,7 @@ app.use(helmet({
 }));
 
 // Global Rate Limiting (S8)
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 500, // limit each IP to 500 requests per windowMs
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 'error', message: 'Too many requests, please try again later.' }
-});
-app.use(limiter);
-
-// Specific stricter limiter for room creation and joins
-export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { status: 'error', message: 'Rate limit reached for room operations. Try again later.' }
-});
+app.use(globalLimiter);
 
 // Configure CORS (S10)
 const allowedOrigins = process.env.ALLOWED_ORIGINS 

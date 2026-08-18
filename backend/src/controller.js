@@ -8,7 +8,23 @@ import { generateRoomToken, verifyRoomToken } from './utils/auth.js';
 import { roomHosts, roomClipboards } from './server.js';
 
 const require = createRequire(import.meta.url);
-const archiver = require('archiver');
+const archiverModule = require('archiver');
+
+const createZipArchive = (options = { zlib: { level: 9 } }) => {
+    if (typeof archiverModule === 'function') {
+        return archiverModule('zip', options);
+    }
+    if (archiverModule.ZipArchive) {
+        return new archiverModule.ZipArchive(options);
+    }
+    if (archiverModule.default && typeof archiverModule.default === 'function') {
+        return archiverModule.default('zip', options);
+    }
+    if (archiverModule.default && archiverModule.default.ZipArchive) {
+        return new archiverModule.default.ZipArchive(options);
+    }
+    throw new Error('Archiver module failed to initialize');
+};
 
 // Helper: Sanitize filenames to prevent directory traversal or header injection (S13)
 const sanitizeFilename = (filename) => {
@@ -200,7 +216,7 @@ export const uploadFile = async (req, res, next) => {
             finalMimeType = 'application/zip';
             storagePath = `uploads/${fileId}.zip`;
 
-            const archive = archiver('zip', { zlib: { level: 9 } });
+            const archive = createZipArchive({ zlib: { level: 9 } });
             const streamPromise = new Promise((resolve, reject) => {
                 const chunks = [];
                 archive.on('data', (chunk) => chunks.push(chunk));
