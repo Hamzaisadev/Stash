@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS public.rooms (
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
     is_protected BOOLEAN DEFAULT FALSE,
-    stack_key TEXT DEFAULT NULL,
+    -- bcrypt hash of the room access code. The plaintext code is returned to the
+    -- creator exactly once, at creation/rotation, and is never stored.
+    stack_key_hash TEXT DEFAULT NULL,
     stack_key_expires_at BIGINT DEFAULT NULL,
     accept_only BOOLEAN DEFAULT FALSE,
     creator_socket_id TEXT DEFAULT 'system',
@@ -40,23 +42,42 @@ CREATE INDEX IF NOT EXISTS idx_files_expires_at ON public.files(expires_at);
 CREATE INDEX IF NOT EXISTS idx_rooms_created_at ON public.rooms(created_at);
 CREATE INDEX IF NOT EXISTS idx_rooms_creator_socket_id ON public.rooms(creator_socket_id);
 
--- 4. Atomic Download Counter Function
-CREATE OR REPLACE FUNCTION increment_download_count(target_file_id UUID)
+-- 4. Atomic download slot claim.
+-- Increments only when the file is under its download limit, in a single
+-- statement, so concurrent requests cannot both pass a separate limit check.
+-- `allowed = false` means the caller must not be served the file.
+CREATE OR REPLACE FUNCTION claim_download(target_file_id UUID)
 RETURNS TABLE (
-    id UUID,
+    allowed BOOLEAN,
     new_count INT,
     max_limit INT,
     file_path TEXT,
     room_id TEXT
 ) LANGUAGE plpgsql AS $$
+DECLARE
+    updated_row public.files;
 BEGIN
-    RETURN QUERY
-    UPDATE public.files
-    SET download_count = download_count + 1
-    WHERE public.files.id = target_file_id
-    RETURNING public.files.id, public.files.download_count, public.files.max_downloads, public.files.file_path, public.files.room_id;
+    UPDATE public.files f
+    SET download_count = f.download_count + 1
+    WHERE f.id = target_file_id
+      AND (f.max_downloads IS NULL OR f.download_count < f.max_downloads)
+    RETURNING f.* INTO updated_row;
+
+    IF updated_row.id IS NULL THEN
+        RETURN QUERY SELECT FALSE, NULL::INT, NULL::INT, NULL::TEXT, NULL::TEXT;
+    ELSE
+        RETURN QUERY SELECT
+            TRUE,
+            updated_row.download_count,
+            updated_row.max_downloads,
+            updated_row.file_path,
+            updated_row.room_id;
+    END IF;
 END;
 $$;
+
+-- Superseded by claim_download(); dropped so it cannot be called by mistake.
+DROP FUNCTION IF EXISTS increment_download_count(UUID);
 
 -- 5. Row Level Security (RLS) - Server-only via Service Role default deny for public
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;

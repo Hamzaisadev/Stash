@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabase.js';
 import { AppError } from './utils/errors.js';
-import { generateRoomToken, verifyRoomToken } from './utils/auth.js';
-import { roomHosts, roomClipboards } from './server.js';
+import { generateRoomToken, verifyRoomToken, generateHostToken, isVerifiedHost } from './utils/auth.js';
+import { roomHosts, roomClipboards } from './state.js';
 import { ZipArchive } from 'archiver';
 
 // Helper: Sanitize filenames to prevent directory traversal or header injection (S13)
@@ -85,7 +85,6 @@ export const cleanupExpiredRooms = async () => {
 
 // Helper: Clean up expired files from PostgreSQL and Supabase Storage
 export const cleanupExpiredFiles = async () => {
-    const now = Date.now();
     try {
         await cleanupExpiredRooms();
 
@@ -108,13 +107,14 @@ export const cleanupExpiredFiles = async () => {
     }
 };
 
-// Helper to check caller authorization for room
-const isCallerAuthorized = (room, hostId, token) => {
+// Helper to check caller authorization for a room.
+// Host rights come only from a server-signed host token (see utils/auth.js).
+const isCallerAuthorized = (req, room) => {
     if (!room) return false;
-    const hasNoSecurity = !room.is_protected && !room.stack_key && !room.accept_only;
+    const hasNoSecurity = !room.is_protected && !room.stack_key_hash && !room.accept_only;
     if (hasNoSecurity) return true;
-    const isHost = hostId && room.creator_socket_id && room.creator_socket_id !== 'system' && room.creator_socket_id === hostId;
-    if (isHost) return true;
+    if (isVerifiedHost(req, room.id)) return true;
+    const token = req.headers['x-room-access-token'] || req.body?.room_access_token || req.query?.token;
     if (token && verifyRoomToken(token, room.id)) return true;
     return false;
 };
@@ -135,9 +135,6 @@ export const uploadFile = async (req, res, next) => {
             room_id = hashIp(clientIP);
         }
 
-        const token = req.headers['x-room-access-token'] || req.body.room_access_token;
-        const hostId = req.headers['x-host-id'] || req.body.host_id;
-
         let { data: roomData } = await supabase.from('rooms').select('*').eq('id', room_id).maybeSingle();
         if (!roomData) {
             const { data: newRoom, error: createErr } = await supabase
@@ -148,7 +145,7 @@ export const uploadFile = async (req, res, next) => {
                     description: 'Auto-created room',
                     is_protected: false,
                     accept_only: false,
-                    creator_socket_id: hostId || 'system',
+                    creator_socket_id: 'system',
                     created_at: Date.now()
                 }])
                 .select()
@@ -158,7 +155,7 @@ export const uploadFile = async (req, res, next) => {
             roomData = newRoom;
         }
 
-        if (!isCallerAuthorized(roomData, hostId, token)) {
+        if (!isCallerAuthorized(req, roomData)) {
             return next(new AppError('You are not authorized to upload files to this room.', 401));
         }
 
@@ -337,11 +334,8 @@ export const downloadFile = async (req, res, next) => {
             return next(new AppError('File not found or has expired.', 404));
         }
 
-        const token = req.headers['x-room-access-token'] || req.body.room_access_token;
-        const hostId = req.headers['x-host-id'] || req.body.host_id;
-
         const { data: roomData } = await supabase.from('rooms').select('*').eq('id', file.room_id).maybeSingle();
-        if (!isCallerAuthorized(roomData, hostId, token)) {
+        if (!isCallerAuthorized(req, roomData)) {
             return next(new AppError('You are not authorized to access this room.', 401));
         }
 
@@ -361,11 +355,20 @@ export const downloadFile = async (req, res, next) => {
             }
         }
 
-        const newDownloadCount = file.download_count + 1;
-        await supabase
-            .from('files')
-            .update({ download_count: newDownloadCount })
-            .eq('id', file.id);
+        // Claim a download slot atomically. A read-then-update here lets two
+        // concurrent requests both pass the limit check above, which leaks a
+        // burn-after-download file twice.
+        const { data: claimed, error: claimError } = await supabase
+            .rpc('claim_download', { target_file_id: file.id });
+
+        if (claimError) throw claimError;
+
+        const claimRow = Array.isArray(claimed) ? claimed[0] : claimed;
+        if (!claimRow || claimRow.allowed === false) {
+            return next(new AppError('This file has reached its download limit and is no longer available.', 410));
+        }
+
+        const newDownloadCount = claimRow.new_count;
 
         if (req.io) {
             req.io.to(file.room_id).emit("file-downloaded", {
@@ -466,11 +469,8 @@ export const getPreview = async (req, res, next) => {
             return next(new AppError('File not found or has expired.', 404));
         }
 
-        const token = req.headers['x-room-access-token'] || req.query.token || req.body?.room_access_token;
-        const hostId = req.headers['x-host-id'] || req.query.host_id || req.body?.host_id;
-
         const { data: roomData } = await supabase.from('rooms').select('*').eq('id', file.room_id).maybeSingle();
-        if (!isCallerAuthorized(roomData, hostId, token)) {
+        if (!isCallerAuthorized(req, roomData)) {
             return next(new AppError('You are not authorized to preview files from this room.', 401));
         }
 
@@ -534,11 +534,8 @@ export const deleteFile = async (req, res, next) => {
             return next(new AppError('File not found or has already been deleted.', 404));
         }
 
-        const token = req.headers['x-room-access-token'] || req.body.room_access_token;
-        const hostId = req.headers['x-host-id'] || req.body.host_id;
-
         const { data: roomData } = await supabase.from('rooms').select('*').eq('id', file.room_id).maybeSingle();
-        if (!isCallerAuthorized(roomData, hostId, token)) {
+        if (!isCallerAuthorized(req, roomData)) {
             return next(new AppError('You are not authorized to delete files from this room.', 401));
         }
 
@@ -586,15 +583,15 @@ export const createRoom = async (req, res, next) => {
         }
 
         const created_at = Date.now();
-        let stack_key = null;
+        let stack_key_plain = null;
+        let stack_key_hash = null;
         let stack_key_expires_at = null;
         const accept_only_val = !!accept_only;
 
-        if (is_protected) {
-            if (!accept_only_val) {
-                stack_key = password ? String(password).trim() : crypto.randomInt(100000, 999999).toString();
-                stack_key_expires_at = Date.now() + 24 * 60 * 60 * 1000;
-            }
+        if (is_protected && !accept_only_val) {
+            stack_key_plain = password ? String(password).trim() : crypto.randomInt(100000, 999999).toString();
+            stack_key_hash = bcrypt.hashSync(stack_key_plain, bcrypt.genSaltSync(10));
+            stack_key_expires_at = Date.now() + 24 * 60 * 60 * 1000;
         }
 
         const { data, error } = await supabase
@@ -604,7 +601,7 @@ export const createRoom = async (req, res, next) => {
                 name: cleanName,
                 description: description ? String(description).trim().slice(0, 500) : '',
                 is_protected: !!is_protected,
-                stack_key,
+                stack_key_hash,
                 stack_key_expires_at,
                 accept_only: accept_only_val,
                 creator_socket_id: host_id || 'system',
@@ -621,6 +618,7 @@ export const createRoom = async (req, res, next) => {
         }
 
         const token = generateRoomToken(data.id, host_id || 'system');
+        const hostToken = generateHostToken(data.id);
 
         res.status(201).json({
             status: 'success',
@@ -631,10 +629,14 @@ export const createRoom = async (req, res, next) => {
                     description: data.description,
                     is_protected: data.is_protected,
                     accept_only: data.accept_only,
-                    stack_key: data.stack_key,
+                    has_stack_key: !!stack_key_hash,
+                    // Returned exactly once, to the creator, so they can share it.
+                    // Never recoverable afterwards — only the hash is stored.
+                    stack_key: stack_key_plain,
                     created_at: data.created_at
                 },
-                token
+                token,
+                host_token: hostToken
             }
         });
     } catch (err) {
@@ -648,7 +650,6 @@ export const createRoom = async (req, res, next) => {
 export const getRoomDetails = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const hostId = req.headers['x-host-id'] || req.query.host_id;
         const token = req.headers['x-room-access-token'] || req.query.token;
 
         const { data: room, error } = await supabase
@@ -662,37 +663,35 @@ export const getRoomDetails = async (req, res, next) => {
             return next(new AppError('Room not found.', 404));
         }
 
-        const isHost = Boolean(hostId && room.creator_socket_id && room.creator_socket_id !== 'system' && room.creator_socket_id === hostId);
+        const isHost = isVerifiedHost(req, room_id);
         const isAuthorized = isHost || Boolean(token && verifyRoomToken(token, room_id));
 
         if ((room.is_protected || room.accept_only) && !isAuthorized) {
             return res.status(403).json({
                 status: 'forbidden',
                 message: 'Access denied. Security key or approval required.',
-                require_password: room.is_protected && !!room.stack_key,
+                require_password: room.is_protected && !!room.stack_key_hash,
                 accept_only: room.accept_only,
                 room_id: room.id
             });
         }
 
-        const responseData = {
-            id: room.id,
-            name: room.name,
-            description: room.description,
-            is_protected: room.is_protected,
-            accept_only: room.accept_only,
-            has_stack_key: !!room.stack_key,
-            created_at: room.created_at,
-            is_host: isHost
-        };
-
-        if (isHost || isAuthorized) {
-            responseData.stack_key = room.stack_key;
-        }
-
+        // creator_socket_id is deliberately never returned: it used to be usable
+        // as a forged host credential.
         res.status(200).json({
             status: 'success',
-            data: { room: responseData }
+            data: {
+                room: {
+                    id: room.id,
+                    name: room.name,
+                    description: room.description,
+                    is_protected: room.is_protected,
+                    accept_only: room.accept_only,
+                    has_stack_key: !!room.stack_key_hash,
+                    created_at: room.created_at,
+                    is_host: isHost
+                }
+            }
         });
     } catch (err) {
         next(err);
@@ -728,8 +727,11 @@ export const joinRoom = async (req, res, next) => {
             return next(new AppError('This room is in Accept Only mode and requires manual approval.', 403));
         }
 
-        if (room.stack_key) {
-            if (room.stack_key !== inputKey) {
+        if (room.stack_key_hash) {
+            if (room.stack_key_expires_at && Date.now() > Number(room.stack_key_expires_at)) {
+                return next(new AppError('This room access code has expired. Ask the host for a new one.', 403));
+            }
+            if (!inputKey || !bcrypt.compareSync(inputKey, room.stack_key_hash)) {
                 return next(new AppError('Incorrect access code.', 403));
             }
         }
@@ -752,7 +754,6 @@ export const updateRoomSettings = async (req, res, next) => {
     try {
         const { room_id } = req.params;
         const { name, description, is_protected, accept_only, password } = req.body;
-        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         const { data: room, error } = await supabase
             .from('rooms')
@@ -765,24 +766,28 @@ export const updateRoomSettings = async (req, res, next) => {
             return next(new AppError('Room not found.', 404));
         }
 
-        // Only verified creator can update settings
-        if (!host_id || room.creator_socket_id !== host_id) {
+        // Only the verified host (server-signed token) can update settings
+        if (!isVerifiedHost(req, room_id)) {
             return next(new AppError('You are not authorized to update settings for this room.', 403));
         }
 
-        let stack_key = room.stack_key;
+        let stack_key_hash = room.stack_key_hash;
         let stack_key_expires_at = room.stack_key_expires_at;
+        let newPlainKey = null;
 
         if (is_protected !== undefined) {
             if (is_protected) {
-                if (password && password.trim()) {
-                    stack_key = password.trim();
-                } else if (!stack_key) {
-                    stack_key = crypto.randomInt(100000, 999999).toString();
+                if (password && String(password).trim()) {
+                    newPlainKey = String(password).trim();
+                } else if (!stack_key_hash) {
+                    newPlainKey = crypto.randomInt(100000, 999999).toString();
+                }
+                if (newPlainKey) {
+                    stack_key_hash = bcrypt.hashSync(newPlainKey, bcrypt.genSaltSync(10));
                 }
                 stack_key_expires_at = Date.now() + 24 * 60 * 60 * 1000;
             } else {
-                stack_key = null;
+                stack_key_hash = null;
                 stack_key_expires_at = null;
             }
         }
@@ -793,7 +798,7 @@ export const updateRoomSettings = async (req, res, next) => {
                 name: name ? String(name).trim().slice(0, 100) : room.name,
                 description: description !== undefined ? String(description).trim().slice(0, 500) : room.description,
                 is_protected: is_protected !== undefined ? !!is_protected : room.is_protected,
-                stack_key,
+                stack_key_hash,
                 stack_key_expires_at,
                 accept_only: accept_only !== undefined ? !!accept_only : room.accept_only
             })
@@ -803,6 +808,8 @@ export const updateRoomSettings = async (req, res, next) => {
 
         if (updateError) throw updateError;
 
+        // Broadcast without the key: room members must not receive it, and the
+        // host already has it in the HTTP response below.
         if (req.io) {
             req.io.to(room_id).emit("room-updated", {
                 id: updatedRoom.id,
@@ -810,14 +817,24 @@ export const updateRoomSettings = async (req, res, next) => {
                 description: updatedRoom.description,
                 is_protected: updatedRoom.is_protected,
                 accept_only: updatedRoom.accept_only,
-                has_stack_key: !!updatedRoom.stack_key,
-                stack_key: updatedRoom.stack_key
+                has_stack_key: !!updatedRoom.stack_key_hash
             });
         }
 
         res.status(200).json({
             status: 'success',
-            data: { room: updatedRoom }
+            data: {
+                room: {
+                    id: updatedRoom.id,
+                    name: updatedRoom.name,
+                    description: updatedRoom.description,
+                    is_protected: updatedRoom.is_protected,
+                    accept_only: updatedRoom.accept_only,
+                    has_stack_key: !!updatedRoom.stack_key_hash,
+                    stack_key_expires_at: updatedRoom.stack_key_expires_at,
+                    stack_key: newPlainKey
+                }
+            }
         });
     } catch (err) {
         next(err);
@@ -830,7 +847,6 @@ export const updateRoomSettings = async (req, res, next) => {
 export const rotateRoomKey = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         const { data: room, error } = await supabase
             .from('rooms')
@@ -843,7 +859,7 @@ export const rotateRoomKey = async (req, res, next) => {
             return next(new AppError('Room not found.', 404));
         }
 
-        if (!host_id || room.creator_socket_id !== host_id) {
+        if (!isVerifiedHost(req, room_id)) {
             return next(new AppError('Only the room host can rotate the access key.', 403));
         }
 
@@ -853,8 +869,9 @@ export const rotateRoomKey = async (req, res, next) => {
         const { data: updatedRoom, error: updateError } = await supabase
             .from('rooms')
             .update({
-                stack_key: newKey,
-                stack_key_expires_at: expiresAt
+                stack_key_hash: bcrypt.hashSync(newKey, bcrypt.genSaltSync(10)),
+                stack_key_expires_at: expiresAt,
+                is_protected: true
             })
             .eq('id', room_id)
             .select()
@@ -862,6 +879,7 @@ export const rotateRoomKey = async (req, res, next) => {
 
         if (updateError) throw updateError;
 
+        // Members learn the key changed, but not what it is.
         if (req.io) {
             req.io.to(room_id).emit("room-updated", {
                 id: updatedRoom.id,
@@ -869,14 +887,23 @@ export const rotateRoomKey = async (req, res, next) => {
                 description: updatedRoom.description,
                 is_protected: updatedRoom.is_protected,
                 accept_only: updatedRoom.accept_only,
-                has_stack_key: true,
-                stack_key: updatedRoom.stack_key
+                has_stack_key: true
             });
         }
 
         res.status(200).json({
             status: 'success',
-            data: { room: updatedRoom }
+            data: {
+                room: {
+                    id: updatedRoom.id,
+                    name: updatedRoom.name,
+                    is_protected: updatedRoom.is_protected,
+                    accept_only: updatedRoom.accept_only,
+                    has_stack_key: true,
+                    stack_key_expires_at: updatedRoom.stack_key_expires_at,
+                    stack_key: newKey
+                }
+            }
         });
     } catch (err) {
         next(err);
@@ -914,11 +941,10 @@ export const deleteRoomData = async (roomId) => {
 export const deleteRoom = async (req, res, next) => {
     try {
         const { room_id } = req.params;
-        const host_id = req.headers['x-host-id'] || req.body.host_id;
 
         const { data: room, error } = await supabase
             .from('rooms')
-            .select('*')
+            .select('id')
             .eq('id', room_id)
             .maybeSingle();
 
@@ -927,7 +953,7 @@ export const deleteRoom = async (req, res, next) => {
             return next(new AppError('Room not found.', 404));
         }
 
-        if (!host_id || room.creator_socket_id !== host_id) {
+        if (!isVerifiedHost(req, room_id)) {
             return next(new AppError('Only the room host can delete this room.', 403));
         }
 
