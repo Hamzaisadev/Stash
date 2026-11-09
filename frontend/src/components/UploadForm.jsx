@@ -87,7 +87,7 @@ export default function UploadForm({
   return (
     <form
       onSubmit={handleUploadSubmit}
-      className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm h-full flex flex-col justify-between min-h-[340px]"
+      className="bg-white border-2 border-slate-900 rounded-[10px] p-4 shadow-[3px_3px_0_0_var(--color-slate-900)] flex flex-col gap-3"
       onDragEnter={handleDrag}
     >
       <div
@@ -95,7 +95,7 @@ export default function UploadForm({
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-50 hover:bg-slate-100/50 flex-grow flex-1 ${
+        className={`border-2 border-dashed rounded-[10px] px-6 py-7 flex flex-col items-center justify-center cursor-pointer transition-all bg-slate-50 hover:bg-slate-100/50 min-h-[108px] ${
           dragActive
             ? "border-red-400 bg-red-50/50"
             : files.length > 0
@@ -130,7 +130,7 @@ export default function UploadForm({
       {files.length > 0 && (
         <div className="space-y-4 pt-2">
           {uploadProgress?.status === "uploading" && (
-            <div className="rounded-2xl border border-slate-200 bg-slate-100 p-3">
+            <div className="rounded-[10px] border-2 border-slate-200 bg-slate-100 p-3">
               <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold mb-2">
                 <span>Uploading {uploadProgress.fileName}</span>
                 <span>{uploadProgress.percent}%</span>
@@ -158,7 +158,7 @@ export default function UploadForm({
           </button>
 
           {showAdvanced && (
-            <div className="space-y-4 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-slideDown">
+            <div className="space-y-4 p-4 bg-slate-50 rounded-[10px] border-2 border-slate-200 animate-slideDown">
               {/* Burn limit toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">

@@ -4,14 +4,52 @@ import { toast } from "sonner";
 import { notifyUploadsChanged } from "./useMyUploads.js";
 
 const serverIP = window.location.hostname;
-const PROD_BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || window.location.origin;
+
+// In production the backend is a separate service. Defaulting to
+// window.location.origin silently pointed the API at the static frontend host,
+// where /api/* returns the SPA's index.html instead of JSON — the app looked
+// deployed but could not upload anything. Fail loudly instead.
+const PROD_BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
+if (import.meta.env.PROD && !PROD_BACKEND_URL) {
+  console.error(
+    "VITE_BACKEND_URL is not set. The frontend has no backend to talk to. " +
+      "Set it to your deployed backend origin (e.g. https://stash-api.up.railway.app) " +
+      "in your hosting provider's environment variables and redeploy.",
+  );
+}
+
 const API_BASE = import.meta.env.PROD
-  ? `${PROD_BACKEND_URL}/api`
+  ? `${PROD_BACKEND_URL || ""}/api`
   : `http://${serverIP}:5000/api`;
 const SOCKET_BASE = import.meta.env.PROD
-  ? PROD_BACKEND_URL
+  ? PROD_BACKEND_URL || ""
   : `http://${serverIP}:5000`;
+
+export const isBackendConfigured = !import.meta.env.PROD || !!PROD_BACKEND_URL;
+
+/**
+ * ICE servers for all peer connections.
+ *
+ * STUN alone fails behind symmetric NAT (most mobile carriers, many corporate
+ * networks), which is why P2P transfer and screen share silently failed for a
+ * large share of users. Set VITE_TURN_URL / VITE_TURN_USERNAME /
+ * VITE_TURN_CREDENTIAL to add a relay and make those paths actually work.
+ */
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  ...(import.meta.env.VITE_TURN_URL
+    ? [
+        {
+          urls: import.meta.env.VITE_TURN_URL,
+          username: import.meta.env.VITE_TURN_USERNAME,
+          credential: import.meta.env.VITE_TURN_CREDENTIAL,
+        },
+      ]
+    : []),
+];
+
+export const hasTurnRelay = !!import.meta.env.VITE_TURN_URL;
 
 const generateClientId = () => {
   let id = localStorage.getItem("stash_client_id");
@@ -45,7 +83,32 @@ const readTokens = () => {
   }
 };
 
+/**
+ * Host tokens are server-signed proof that this browser created a room.
+ * Kept separate from room access tokens: an access token only grants entry,
+ * a host token grants settings/rotate/delete.
+ */
+const readHostTokens = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("stash_host_tokens") || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveHostToken = (roomId, hostToken) => {
+  if (!roomId || !hostToken) return;
+  const tokens = readHostTokens();
+  tokens[roomId] = hostToken;
+  localStorage.setItem("stash_host_tokens", JSON.stringify(tokens));
+};
+
+const getHostToken = (roomId) => (roomId ? readHostTokens()[roomId] : undefined);
+
 const getAuthHeaders = (roomId = null, isJson = false) => {
+  // x-host-id is still sent, but only as a room-ownership *grouping* key for
+  // the per-creator room cap. It is no longer accepted as proof of host rights.
   const headers = { "x-host-id": generateClientId() };
   if (isJson) {
     headers["Content-Type"] = "application/json";
@@ -53,6 +116,8 @@ const getAuthHeaders = (roomId = null, isJson = false) => {
   if (roomId) {
     const tokens = readTokens();
     if (tokens[roomId]) headers["x-room-access-token"] = tokens[roomId];
+    const hostToken = getHostToken(roomId);
+    if (hostToken) headers["x-host-token"] = hostToken;
   }
   return headers;
 };
@@ -163,6 +228,8 @@ export function useStash(routeRoomId = null) {
 
   const socketRef = useRef(null);
   const activePeerConnections = useRef({});
+  // fileId -> { resolve, reject } for in-flight P2P download attempts
+  const p2pPending = useRef({});
 
   // Screen Share RTC references
   const screenStreamRef = useRef(null);
@@ -196,20 +263,12 @@ export function useStash(routeRoomId = null) {
       console.log("Socket connected:", socket.id);
       setTimeout(() => {
         if (socketRef.current && roomRef.current.id) {
-          const isHost =
-            roomRef.current.creator_socket_id === generateClientId() ||
-            roomRef.current.creator_socket_id === "system";
+          const roomId = roomRef.current.id;
           socketRef.current.emit("join-room", {
-            roomId: roomRef.current.id,
-            clientId: generateClientId(),
-            isHost,
+            roomId,
+            token: readTokens()[roomId],
+            hostToken: getHostToken(roomId),
           });
-          console.log(
-            "Re-emitted join-room on connect:",
-            roomRef.current.id,
-            "isHost:",
-            isHost,
-          );
         }
       }, 50);
     });
@@ -428,7 +487,7 @@ export function useStash(routeRoomId = null) {
         if (signal.type === "screen-request") {
           // PRESENTER SIDE: Receiver wants our screen capture
           const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            iceServers: ICE_SERVERS,
           });
           screenSharePCs.current[senderId] = pc;
 
@@ -461,7 +520,7 @@ export function useStash(routeRoomId = null) {
         } else if (signal.sdp && signal.sdp.type === "offer") {
           // RECEIVER SIDE: Receive offer from presenter
           const pc = new RTCPeerConnection({
-            iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+            iceServers: ICE_SERVERS,
           });
           receiverScreenPC.current = pc;
 
@@ -597,8 +656,9 @@ export function useStash(routeRoomId = null) {
           description: roomInfo.description,
           is_protected: roomInfo.is_protected,
           accept_only: roomInfo.accept_only,
-          stack_key: roomInfo.stack_key,
-          creator_socket_id: roomInfo.creator_socket_id,
+          has_stack_key: roomInfo.has_stack_key,
+          // Authoritative, from the server's host-token check.
+          is_host: roomInfo.is_host,
         }));
 
         // Keep sidebar lists updated with the latest names
@@ -675,10 +735,11 @@ export function useStash(routeRoomId = null) {
       if (json.status === "success") {
         const newRoomId = json.data.room.id;
 
-        // Store token
+        // Store the room access token and the host token proving we created it
         const tokens = readTokens();
         tokens[newRoomId] = json.data.token;
         localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
+        saveHostToken(newRoomId, json.data.host_token);
 
         // Add to myRooms
         setMyRooms((prev) => [
@@ -692,8 +753,10 @@ export function useStash(routeRoomId = null) {
           description: json.data.room.description,
           is_protected: json.data.room.is_protected,
           accept_only: json.data.room.accept_only,
+          has_stack_key: json.data.room.has_stack_key,
+          // Shown once on creation; the server only keeps a hash.
           stack_key: json.data.room.stack_key,
-          creator_socket_id: json.data.room.creator_socket_id,
+          is_host: true,
         }));
         return { success: true, room: json.data.room };
       }
@@ -730,28 +793,25 @@ export function useStash(routeRoomId = null) {
 
   const requestAccessAcceptOnly = (roomId, guestName) => {
     if (socketRef.current) {
-      socketRef.current.emit("join-request", { roomId, guestName, clientId });
+      socketRef.current.emit("join-request", { roomId, guestName });
     }
   };
 
+  // Host authority is established by the host token sent at join-room time,
+  // so these no longer pass a client-supplied hostId.
   const approveGuest = (roomId, guestSocketId, guestClientId) => {
     if (socketRef.current) {
       socketRef.current.emit("join-approve", {
         roomId,
         guestSocketId,
         guestClientId,
-        hostId: clientId,
       });
     }
   };
 
   const denyGuest = (roomId, guestSocketId) => {
     if (socketRef.current) {
-      socketRef.current.emit("join-deny", {
-        roomId,
-        guestSocketId,
-        hostId: clientId,
-      });
+      socketRef.current.emit("join-deny", { roomId, guestSocketId });
     }
   };
 
@@ -765,18 +825,18 @@ export function useStash(routeRoomId = null) {
       const json = await res.json();
       if (json.status === "success") {
         const updatedRoom = json.data.room;
-        // Merge full server response so generated stack_key, expires_at etc. are reflected
         setRoom((prev) => ({
           ...prev,
           name: updatedRoom.name,
           description: updatedRoom.description,
           is_protected: updatedRoom.is_protected,
           accept_only: updatedRoom.accept_only,
-          stack_key: updatedRoom.stack_key,
+          has_stack_key: updatedRoom.has_stack_key,
+          // Present only when this call set a new key; null otherwise.
+          stack_key: updatedRoom.stack_key ?? prev.stack_key,
           stack_key_expires_at: updatedRoom.stack_key_expires_at,
-          creator_socket_id: updatedRoom.creator_socket_id,
         }));
-        return { success: true };
+        return { success: true, stack_key: updatedRoom.stack_key };
       }
       throw new Error(json.message);
     } catch (err) {
@@ -866,16 +926,13 @@ export function useStash(routeRoomId = null) {
 
   const joinRoomChannel = useCallback(() => {
     if (socketRef.current && room.id) {
-      const isHost =
-        room.creator_socket_id === generateClientId() ||
-        room.creator_socket_id === "system";
       socketRef.current.emit("join-room", {
         roomId: room.id,
-        clientId: generateClientId(),
-        isHost,
+        token: readTokens()[room.id],
+        hostToken: getHostToken(room.id),
       });
     }
-  }, [room.id, room.creator_socket_id]);
+  }, [room.id]);
 
   // Load the room whenever its id changes. fetchRoomDetails already calls
   // fetchRoomFiles internally, so this is one chain — previously the mount
@@ -1139,6 +1196,7 @@ export function useStash(routeRoomId = null) {
       const fallbackTimer = setTimeout(() => {
         if (!hasResolved) {
           hasResolved = true;
+          delete p2pPending.current[fileId];
           cleanupPC();
           reject("P2P Timeout");
         }
@@ -1151,21 +1209,26 @@ export function useStash(routeRoomId = null) {
         }
       };
 
-      window[`p2p_resolve_${fileId}`] = (blob) => {
-        if (!hasResolved) {
+      // Pending transfer callbacks live in a ref map rather than on `window`:
+      // globals of the form window[`p2p_resolve_${fileId}`] were never deleted,
+      // so every attempted download leaked a closure and could collide with
+      // another transfer of the same file.
+      p2pPending.current[fileId] = {
+        resolve: (blob) => {
+          if (hasResolved) return;
           hasResolved = true;
           clearTimeout(fallbackTimer);
+          delete p2pPending.current[fileId];
           resolve(blob);
-        }
-      };
-
-      window[`p2p_reject_${fileId}`] = (err) => {
-        if (!hasResolved) {
+        },
+        reject: (err) => {
+          if (hasResolved) return;
           hasResolved = true;
           clearTimeout(fallbackTimer);
+          delete p2pPending.current[fileId];
           cleanupPC();
           reject(err);
-        }
+        },
       };
 
       socketRef.current.emit("p2p-signal", {
@@ -1181,7 +1244,7 @@ export function useStash(routeRoomId = null) {
 
   const handlePeerAvailability = async (fileId, uploaderId) => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: ICE_SERVERS,
     });
     activePeerConnections.current[uploaderId] = pc;
 
@@ -1195,8 +1258,7 @@ export function useStash(routeRoomId = null) {
     channel.onmessage = (event) => {
       if (typeof event.data === "string" && event.data === "EOF") {
         const finalBlob = new Blob(chunks);
-        const resolveFn = window[`p2p_resolve_${fileId}`];
-        if (resolveFn) resolveFn(finalBlob);
+        p2pPending.current[fileId]?.resolve(finalBlob);
         pc.close();
       } else {
         chunks.push(event.data);
@@ -1237,7 +1299,7 @@ export function useStash(routeRoomId = null) {
   const handleIncomingSdp = async (sdp, senderId) => {
     if (sdp.type === "offer") {
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        iceServers: ICE_SERVERS,
       });
       activePeerConnections.current[senderId] = pc;
 
@@ -1479,7 +1541,6 @@ export function useStash(routeRoomId = null) {
         roomId,
         guestSocketId,
         guestClientId,
-        hostId: clientId,
       });
     }
   };

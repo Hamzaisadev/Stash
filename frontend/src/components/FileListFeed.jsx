@@ -69,7 +69,7 @@ export default function FileListFeed({
           {[1, 2, 3].map((n) => (
             <div
               key={n}
-              className="h-20 bg-slate-100/70 animate-pulse rounded-2xl border border-slate-200/60"
+              className="h-20 bg-slate-100/70 animate-pulse rounded-[10px] border-2 border-slate-200"
             />
           ))}
         </div>

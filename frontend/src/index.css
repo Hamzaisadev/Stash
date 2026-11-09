@@ -1,6 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/geist";
+/* Both families ship every subset, but each @font-face carries a unicode-range
+   so browsers only fetch the Latin files for this UI. */
+@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/geist-mono/wght.css";
+/* Landing page only ("toss it across", see DESIGN.md). Scoped under .lp so
+   none of it reaches the app UI, which keeps its own light theme. */
+@import "./styles/landing.css";
+/* The room's file surface. */
+@import "./styles/desk.css";
+/* The app frame: bar, share strip, inline panels, mode rail. */
+@import "./styles/shell.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -30,24 +40,69 @@
 
   /* Layout — replaces the hard 672px (max-w-2xl) content cap */
   --container-content: 88rem; /* 1408px → max-w-content */
+
+  /* ── App palette, retuned to match the landing page ──────────────────
+     The app is written almost entirely in slate-* and red-500 (≈500 class
+     occurrences). Rather than rewrite every component, the scales themselves
+     are redefined: warm paper greys instead of cool blue-greys, and the
+     landing page's electric blue as the action colour. Markup is untouched.
+
+     Two steps are darkened on purpose. slate-400 was #90a1b9 at 2.51:1 on the
+     app's near-white ground, which failed WCAG AA on nine elements; it and
+     slate-500 now clear 4.5:1. */
+  --color-slate-50: #fbf7f0; /* warm paper, the app ground */
+  --color-slate-100: #f3ede2;
+  --color-slate-200: #e3ddd1; /* hairlines */
+  --color-slate-300: #cdc5b6;
+  /* 4.9:1 on the sidebar's #f3ede2, which is the darkest ground it sits on.
+     Was #90a1b9 at 2.51:1, failing AA on nine elements. */
+  --color-slate-400: #65625d;
+  --color-slate-500: #5c6069; /* 5.9:1 on slate-50 */
+  --color-slate-600: #4a4e56;
+  --color-slate-700: #33373d;
+  --color-slate-800: #1f2226;
+  --color-slate-900: #14161a; /* ink */
+
+  /* red-500 was the action colour; it is now the landing page's blue, so
+     primary actions read the same in both halves of the product. The name is
+     kept because ~90 class occurrences depend on it. */
+  --color-red-50: #eef0ff;
+  --color-red-100: #dfe3ff;
+  --color-red-200: #c3caff;
+  --color-red-500: #2f4bff;
+  --color-red-600: #2439cc;
+  --color-red-700: #1b2b99;
+
+  /* True destructive red, for the few places that must stay a warning.
+     danger-600 is the text step: 4.96:1 on danger-50, so warning copy on a
+     warning background still clears AA. */
+  --color-danger-50: #fff0ed;
+  --color-danger-500: #ff5d3a;
+  --color-danger-600: #c2351a;
 }
 
 /* Repeated-pattern utilities. Each of these appeared 10+ times as a literal
    class string across AppPage/Sidebar/UploadForm/ClipboardFeed/VoiceRecorder. */
+/* Micro-labels are mono, matching the landing page's data voice, and use
+   slate-500 so they clear AA rather than fading into the ground. */
 @utility label-eyebrow {
-  @apply text-3xs font-bold uppercase tracking-widest text-slate-400;
+  @apply text-3xs font-bold uppercase tracking-widest text-slate-500;
+  font-family: var(--font-mono);
 }
 
+/* Cards carry the landing page's physical language: a hard 2px edge and an
+   offset shadow, like something sitting on a desk. No soft blur. */
 @utility surface {
-  @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  @apply rounded-[10px] border-2 border-slate-900 bg-white;
+  box-shadow: 3px 3px 0 0 var(--color-slate-900);
 }
 
 @utility surface-inset {
-  @apply rounded-lg border border-slate-200 bg-slate-50;
+  @apply rounded-[10px] border-2 border-slate-200 bg-slate-50;
 }
 
 @utility focus-brand {
-  @apply outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/40;
+  @apply outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500;
 }
 
 /* Row actions revealed on hover. Touch devices cannot hover, so the actions
@@ -67,8 +122,8 @@
 
 body {
   font-family: var(--font-sans);
-  background: #f8fafc;
-  color: #0f172a;
+  background: #fbf7f0; /* warm paper, shared with the landing page */
+  color: #14161a;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -313,38 +368,41 @@ audio::-webkit-media-controls-panel {
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* shadcn tokens, retuned to the landing page's palette so dialogs, inputs
+     and buttons match the rest of the product instead of shipping the stock
+     neutral theme. Values are hex for legibility; Tailwind v4 accepts both. */
+  --background: #fbf7f0; /* warm paper */
+  --foreground: #14161a; /* ink */
+  --card: #ffffff;
+  --card-foreground: #14161a;
+  --popover: #ffffff;
+  --popover-foreground: #14161a;
+  --primary: #2f4bff; /* electric blue: the action colour */
+  --primary-foreground: #ffffff;
+  --secondary: #f3ede2;
+  --secondary-foreground: #14161a;
+  --muted: #f3ede2;
+  --muted-foreground: #5c6069; /* 5.9:1 on paper */
+  --accent: #f3ede2;
+  --accent-foreground: #14161a;
+  --destructive: #e04422; /* a real warning red, distinct from primary */
+  --border: #e3ddd1;
+  --input: #cdc5b6;
+  --ring: #2f4bff;
+  --chart-1: #2f4bff;
+  --chart-2: #ff5d3a;
+  --chart-3: #ffc53d;
+  --chart-4: #5c6069;
+  --chart-5: #14161a;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f3ede2;
+  --sidebar-foreground: #14161a;
+  --sidebar-primary: #2f4bff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #14161a;
+  --sidebar-border: #e3ddd1;
+  --sidebar-ring: #2f4bff;
 }
 
 .dark {
