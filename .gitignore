@@ -27,3 +27,6 @@ yarn-error.log*
 .eslintcache
 .DS_Store
 Thumbs.db
+
+# 7. QA / screenshot output
+.shots/
