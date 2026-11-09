@@ -27,7 +27,8 @@ Whether you need to quickly send a photo from your phone to your PC, share code 
 
 ### 📁 Instant File Sharing & Drop-Zone
 - **Drag & Drop / Paste**: Drop any file format—images, videos, PDFs, archives, or ebooks—or just paste directly from your clipboard.
-- **Fast Transfers**: Direct peer-to-peer transfers for blazing-fast local device handoffs, backed by secure cloud storage when peers are offline.
+- **Limits**: 100 MB per file, up to 10 files per upload (multiple files are zipped server-side).
+- **Transfers**: Files are uploaded to cloud storage (Supabase) and served from there. An opportunistic WebRTC peer-to-peer path is attempted first for devices in the same room; it requires a TURN server to work across most mobile and corporate networks (see configuration below).
 - **In-Browser Previews**: Listen to audio files, view images, and inspect files without downloading them first.
 
 ### 📋 Live Synced Clipboard
@@ -41,11 +42,13 @@ Whether you need to quickly send a photo from your phone to your PC, share code 
 ### 🎙️ Quick Voice Memos
 - Record voice notes right from your browser and stash them directly into the room for your peers or your other devices.
 
-### 🔒 Privacy-First & Ephemeral Control
-- **Burn After Download**: Set files to self-destruct immediately after being downloaded once.
-- **Timed Expiry**: Files automatically expire and clean themselves up—no leftover digital clutter.
-- **Room Protection**: Lock rooms with a 6-digit access pin or enable host approval (lobby mode) to control who gets in.
-- **Local Network Auto-Discovery**: Automatically find and connect to devices on the same Wi-Fi/network without typing room codes.
+### 🔒 Ephemeral Control
+- **Burn After Download**: Set files to self-destruct after a chosen number of downloads.
+- **Timed Expiry**: Files expire between 1 minute and 7 days (default 24h); rooms and their contents are deleted after 24 hours.
+- **Room Protection**: Lock rooms with a 6-digit access code (stored as a bcrypt hash) or enable host approval (lobby mode) to control who gets in.
+- **Local Network Auto-Discovery**: Devices sharing a public IP are grouped into the same auto-discovered room.
+
+> **Not end-to-end encrypted.** Traffic is encrypted in transit and files are encrypted at rest by the storage provider, but whoever operates the instance can access uploaded files. Don't use Stash for data you wouldn't trust a hosted service with.
 
 ---
 
@@ -86,28 +89,70 @@ git clone https://github.com/Hamzaisadev/Stash.git
 cd Stash
 ```
 
-### 2. Configure Backend Environment
-Create a `.env` file in the `backend/` directory:
+### 2. Set up the database
+Run `backend/schema.sql` against your Supabase project (SQL Editor), and create
+a storage bucket named `stash-files`.
+
+Upgrading an existing instance? Run `backend/migrations/001_hash_room_keys_and_atomic_downloads.sql` instead.
+
+### 3. Configure the backend
+Copy `backend/.env.example` to `backend/.env` and fill it in:
 ```env
 PORT=5000
+NODE_ENV=development
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SECRET_KEY=your-supabase-service-key
+SUPABASE_SECRET_KEY=your-supabase-service-role-key
+
+# Required — the server refuses to start without it (min 32 chars).
+# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+TOKEN_SECRET=
+
+# Required in production — comma-separated frontend origins.
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
 ```
 
-### 3. Install & Run
+### 4. Install & run
 ```bash
-# Install backend dependencies
-cd backend
-npm install
-npm run dev
+cd backend && npm install && npm run dev
+# separate terminal
+cd frontend && npm install && npm run dev
+```
+Open `http://localhost:5173`. In development the frontend talks to
+`http://<hostname>:5000` automatically.
 
-# In a separate terminal, install and run frontend
-cd ../frontend
-npm install
-npm run dev
+### 5. Deploying
+
+The frontend is static (Vercel works well). **The backend must be deployed
+separately** — it needs a persistent process for WebSockets, so Vercel is not
+suitable. Railway, Fly.io and Render all work. Avoid hosts that sleep on
+inactivity: that drops socket connections and clears in-memory room state.
+
+Then set the frontend's environment variables (copy `frontend/.env.example`):
+
+```env
+# Required. Without it, production builds call /api on the frontend's own
+# origin, which returns the SPA's HTML instead of JSON, and nothing works.
+VITE_BACKEND_URL=https://your-backend.up.railway.app
+
+# Optional but strongly recommended: without a TURN relay, peer-to-peer
+# transfer and screen sharing fail behind symmetric NAT (most mobile networks).
+VITE_TURN_URL=
+VITE_TURN_USERNAME=
+VITE_TURN_CREDENTIAL=
 ```
 
-Open `http://localhost:5173` in your browser.
+### Running tests
+```bash
+cd backend && npm test
+```
+
+### Known limitations
+- Single backend instance only. Room host and clipboard state is in-process, so
+  scaling out requires moving it to Redis plus the socket.io Redis adapter.
+- Uploads and downloads are proxied through the server's memory, so large
+  concurrent transfers are memory-bound. Presigned direct-to-storage uploads
+  are the fix.
+- Peer-to-peer transfer needs TURN to work on most real networks.
 
 </details>
 

@@ -11,40 +11,51 @@ The application codebase is structured as a monorepo containing distinct `fronte
 ```text
 Stash/
 ├── backend/
+│   ├── migrations/
+│   │   └── 001_hash_room_keys_and_atomic_downloads.sql
 │   ├── src/
 │   │   ├── utils/
-│   │   │   ├── auth.js            # Cryptographic token signing & validation middleware
-│   │   │   └── errors.js          # AppError class & global express handler
+│   │   │   ├── auth.js            # Room & host token signing, verification, access middleware
+│   │   │   ├── errors.js          # AppError class & global express handler
+│   │   │   └── limiter.js         # express-rate-limit configurations
 │   │   ├── controller.js          # REST controllers (rooms, file uploads, previews, auth)
-│   │   ├── db.js                  # Postgres helper configurations (if applicable)
 │   │   ├── routes.js              # Express endpoint bindings
-│   │   ├── server.js              # Express app init & Socket.io events manager
-│   │   ├── supabase.js            # Supabase SDK instance & bucket init
-│   │   └── upload.js              # Multer configuration for file streaming
-│   ├── .env                       # Backend secret credentials
+│   │   ├── server.js              # Express app init, CORS policy, Socket.io events, cleanup timer
+│   │   ├── state.js               # Shared in-memory room/clipboard maps
+│   │   ├── supabase.js            # Supabase SDK instance
+│   │   ├── upload.js              # Multer configuration (100MB x 10, memory storage)
+│   │   ├── cors.test.js           # CORS origin policy tests
+│   │   └── utils/auth.test.js     # Token signing/verification tests
+│   ├── schema.sql                 # Postgres schema, indexes, RLS, claim_download()
+│   ├── .env.example               # Required configuration template
 │   ├── Dockerfile                 # Production backend container build file
-│   └── package.json               # Backend dependencies (express, socket.io, supabase-js)
+│   └── package.json               # express, socket.io, supabase-js, bcryptjs, vitest
 │
 └── frontend/
     ├── src/
     │   ├── assets/                # CSS vectors & brand assets
     │   ├── components/            # Isolated React UI components
-    │   │   ├── ui/                # Base design system components (sidebar, drawer, etc.)
+    │   │   ├── ui/                # Base design system components (sidebar, dialog, etc.)
+    │   │   ├── ClipboardFeed.jsx  # Synced clipboard history list
+    │   │   ├── ErrorBoundary.jsx  # Top-level render error trap
     │   │   ├── FileCard.jsx       # Card element representing shared files & custom audio player
     │   │   ├── FileListFeed.jsx   # List container managing file lists and download progress states
-    │   │   ├── GateScreen.jsx     # Security interface (passwords & host approval lobby)
+    │   │   ├── GateScreen.jsx     # Security interface (access codes & host approval lobby)
+    │   │   ├── QrCode.jsx         # Client-side QR rendering (no third-party service)
     │   │   ├── ScreenShare.jsx    # WebRTC stream casting overlay & controls
-    │   │   ├── SettingsDrawer.jsx # Settings drawer for password setup & security toggles
     │   │   ├── Sidebar.jsx        # Navigation sidebar for switching rooms
     │   │   ├── UploadForm.jsx     # File drop-zone upload container
     │   │   └── VoiceRecorder.jsx  # Mic capture utility producing WebM audio files
     │   ├── hooks/
-    │   │   └── useStash.js        # Core custom hook coordinating WebSockets, state, and WebRTC
+    │   │   └── useStash.js        # Core hook coordinating WebSockets, state, and WebRTC
     │   ├── pages/
-    │   │   └── AppPage.jsx        # Main layout dashboard orchestrating view modes
-    │   ├── App.jsx                # Router & root React state bindings
-    │   ├── index.css              # Main glassmorphic design system stylesheets
+    │   │   ├── AppPage.jsx        # Main layout dashboard orchestrating view modes
+    │   │   ├── Landing.jsx        # Marketing landing page
+    │   │   └── Legal.jsx          # Privacy policy and Terms / Acceptable Use
+    │   ├── App.jsx                # Routing & root React state bindings
+    │   ├── index.css              # Design system stylesheets
     │   └── main.jsx               # Entry-point bootstrap rendering index.html root
+    ├── .env.example               # VITE_BACKEND_URL and TURN configuration
     ├── vite.config.js             # Vite configurations (bundler, ports, aliases)
     └── index.html                 # Main SPA HTML structure
 ```
@@ -57,12 +68,12 @@ All HTTP REST endpoints operate under the host address `/api` (dev port `3000`).
 
 | HTTP Method | Endpoint | Headers Required | Request Payload / Params | Response Payload (Success) | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **POST** | `/rooms` | `x-host-id` | `body: { id, name, description, is_protected, access_mode }` | `{ status: 'success', data: { room } }` | Creates a new room. Generates initial Stack Key passcode if room is protected. |
-| **GET** | `/rooms/:room_id` | `x-host-id`, `x-room-access-token` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Fetches room parameters. If unauthorized (no token, no host match) and room is protected, returns `403 Forbidden` with room metadata fields. |
-| **POST** | `/rooms/:room_id/join` | None | `body: { password }` | `{ status: 'success', data: { token } }` | Verifies room key. Returns cryptographic signature token if verified. |
-| **POST** | `/rooms/:room_id/update` | `x-host-id` | `body: { name, description, is_protected, accept_only }` | `{ status: 'success', data: { room } }` | Updates room configurations (e.g., changes name, description, or security mode). |
-| **POST** | `/rooms/:room_id/rotate-key` | `x-host-id` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Forces immediate rotation of the 6-digit room passcode. |
-| **DELETE** | `/rooms/:room_id` | `x-host-id` | `params: { room_id }` | `{ status: 'success', data: { message } }` | Purges a room and all files linked to it from database & object bucket. |
+| **POST** | `/rooms` | `x-host-id` (grouping only) | `body: { id, name, description, is_protected, accept_only, password }` | `{ status: 'success', data: { room, token, host_token } }` | Creates a room. Returns the host token (store it — it is the only proof of ownership) and, if protected, the plaintext access code **once**. |
+| **GET** | `/rooms/:room_id` | `x-host-token`, `x-room-access-token` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Fetches room parameters. Protected/accept-only rooms return `403` with minimal metadata when unauthorized. Never returns `creator_socket_id` or the access code. |
+| **POST** | `/rooms/:room_id/join` | None | `body: { password }` | `{ status: 'success', data: { token } }` | Verifies the access code against its bcrypt hash and enforces its expiry. Returns a signed room access token. |
+| **POST** | `/rooms/:room_id/update` | `x-host-token` | `body: { name, description, is_protected, accept_only, password }` | `{ status: 'success', data: { room } }` | Updates room configuration. Returns a new plaintext code only if this call set one. |
+| **POST** | `/rooms/:room_id/rotate-key` | `x-host-token` | `params: { room_id }` | `{ status: 'success', data: { room } }` | Rotates the 6-digit access code and returns the new one once. |
+| **DELETE** | `/rooms/:room_id` | `x-host-token` | `params: { room_id }` | `{ status: 'success', data: { message } }` | Purges a room and all files linked to it from database & object bucket. |
 | **GET** | `/room` | None | None | `{ status: 'success', data: { room_id } }` | Auto-discovery route. Resolves caller public IP and returns the hashed room ID. |
 | **GET** | `/files/:room_id` | `x-room-access-token` | `params: { room_id }` | `{ status: 'success', data: { files } }` | Fetches lists of active files in that room. Passes through `checkRoomAccess` guard. |
 | **POST** | `/upload` | `x-room-access-token` | `multipart/form-data: { files, roomId, expiresHours }` | `{ status: 'success', data: { files } }` | Parses files via Multer and streams them directly into Supabase Storage under room-scoped folders. |
@@ -130,15 +141,37 @@ Because `RTCDataChannel` enforces maximum packet limits (usually 64KB, but cappe
 3.  **Assembly**: The downloader browser receives chunks in `dataChannel.onmessage` events, appends them to a memory array, and on receiving `"EOF"`, instantiates `new Blob(receivedChunks)` to download the file directly from memory.
 
 ### B. Access Token Cryptography (HMAC-SHA256)
-Room tokens are signed statelessly on the backend using a server-side environment secret key:
+
+There are **two** kinds of token, both signed statelessly with `TOKEN_SECRET`
+(required at boot; the server exits if it is missing or under 32 chars).
+
+**Room access tokens** grant entry to a room and expire after 24 hours:
+
 ```javascript
 export const generateRoomToken = (roomId, clientId) => {
-    const data = `${roomId.trim()}:${clientId.trim()}`;
-    const signature = crypto.createHmac('sha256', SECRET).update(data).digest('hex');
-    return `${data}:${signature}`;
+    const payload = `${roomId.trim()}:${clientId.trim()}:${Date.now()}`;
+    const signature = crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('hex');
+    return `${payload}:${signature}`;
 };
 ```
-When validated, the backend splits the token into components, re-computes the signature using the server secret, and asserts that the calculated signature matches the token's signature, and that the token `roomId` matches the URL resource path parameter.
+
+**Host tokens** (`host:<roomId>:<ts>:<sig>`) prove room ownership and are issued
+once, at room creation. Every host-only operation — update settings, rotate key,
+delete room — requires one.
+
+Verification recomputes the HMAC and compares with `crypto.timingSafeEqual`,
+asserts the token's `roomId` matches the URL parameter, checks the timestamp for
+room tokens, and checks the `host:` prefix so the two token types can never be
+substituted for one another.
+
+**Why host tokens exist:** ownership was previously asserted with an
+`x-host-id` header whose value the client generated in `localStorage`. Anyone
+who learned a room's creator id could send it and take over the room. That id is
+still sent, but only to group rooms for the per-creator room cap — it grants no
+authority.
+
+Room access codes are stored as bcrypt hashes. The plaintext code is returned
+exactly once, to the creator, and is not recoverable afterwards.
 
 ### C. Voice Recorder Chromium WebM Duration Workaround
 WebM streams created by browser microphones using `MediaRecorder` do not write duration metadata indices since the duration is unknown during recording. Chrome reads this duration as `Infinity`. We solve this on load with a seek-scan trick:
