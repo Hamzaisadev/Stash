@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /$
+Allow: /privacy
+Allow: /terms
+
+# Rooms are private, ephemeral and deleted after 24 hours. There is nothing
+# useful to index and crawling them would only create dead links.
+Disallow: /rooms
+
+Sitemap: https://stash-ed.vercel.app/sitemap.xml
