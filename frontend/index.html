@@ -5,42 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Stash is a secure instant file room for sharing files, screens, and clipboard content across devices. Create a private room, share links, and keep everything temporary without accounts."
-    />
-    <meta
-      name="keywords"
-      content="file sharing, secure room, instant transfer, clipboard sync, screen sharing, secure file transfer"
+      content="Move files between your phone and laptop without an account. Drop them in a room, share the link, and everything deletes itself."
     />
     <meta name="robots" content="index, follow" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Stash" />
-    <meta property="og:title" content="Stash — Secure Instant File Rooms" />
+    <meta property="og:title" content="Stash: toss files between your devices" />
     <meta
       property="og:description"
-      content="Share files instantly, manage secure rooms, sync clipboards, and stream screens directly between devices."
+      content="Move files between your phone and laptop without an account. Drop them in a room, share the link, and everything deletes itself."
     />
-    <meta property="og:image" content="/favicon.svg" />
-    <meta property="og:image:alt" content="Stash app logo" />
-    <meta property="og:url" content="https://stash.app/" />
-    <link rel="canonical" href="https://stash.app/" />
+    <meta property="og:image" content="https://stash-ed.vercel.app/og.png" />
+    <meta
+      property="og:image:alt"
+      content="Stash: toss it across. Coloured file chips beside a laptop."
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://stash-ed.vercel.app/" />
+    <link rel="canonical" href="https://stash-ed.vercel.app/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Stash — Secure Instant File Rooms" />
+    <meta name="twitter:title" content="Stash: toss files between your devices" />
     <meta
       name="twitter:description"
-      content="Share files instantly, manage secure rooms, sync clipboards, and stream screens directly between devices."
+      content="Move files between your phone and laptop without an account. Drop them in a room, share the link, and everything deletes itself."
     />
-    <meta name="twitter:image" content="/favicon.svg" />
+    <meta name="twitter:image" content="https://stash-ed.vercel.app/og.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#f8fafc" />
-    <title>Stash — Secure Instant File Rooms</title>
+    <meta name="theme-color" content="#fbf7f0" />
+    <title>Stash: toss files between your devices</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Stash",
+        "url": "https://stash-ed.vercel.app/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any browser",
+        "description": "Move files between your phone and laptop without an account. Drop them in a room, share the link, and everything deletes itself.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      This is a client-rendered SPA, so the shell ships a real heading and main
+      landmark. Crawlers and link previews that do not run JavaScript would
+      otherwise see an empty page. React replaces this on mount.
+    -->
+    <div id="root">
+      <main>
+        <h1>Stash: toss files between your devices</h1>
+        <p>
+          Move files between your phone and laptop without an account. Open a
+          room, drop your file in, and share the link. Files are up to 100 MB
+          each, ten per upload, and rooms delete themselves after 24 hours.
+        </p>
+        <p><a href="/rooms">Open a room</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
