@@ -1,0 +1,376 @@
+/* ==========================================================================
+   THE DESK — the room's file surface.
+   Files are physical objects on a shared surface rather than rows in a table.
+   Shares the landing page's palette and its hard-edge/offset-shadow language.
+   ========================================================================== */
+
+.dk {
+  --dk-ink: #14161a;
+  --dk-line: #e3ddd1;
+  --dk-muted: #5c6069;
+  --dk-blue: #2f4bff;
+  --dk-danger: #ff5d3a;
+  --dk-mono: "Geist Mono Variable", ui-monospace, monospace;
+
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* --- bar --------------------------------------------------------------- */
+.dk__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dk__count {
+  font-size: 0.8125rem;
+  color: var(--dk-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dk-toggle {
+  display: inline-flex;
+  border: 2px solid var(--dk-ink);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.dk-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--dk-mono);
+  font-size: 0.75rem;
+  padding: 0.45rem 0.8rem;
+  min-height: 32px;
+  background: #fff;
+  color: var(--dk-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+.dk-toggle button + button {
+  border-left: 2px solid var(--dk-ink);
+}
+.dk-toggle button svg {
+  width: 14px;
+  height: 14px;
+}
+.dk-toggle button.is-on {
+  background: var(--dk-ink);
+  color: #fff;
+}
+@media (hover: hover) {
+  .dk-toggle button:not(.is-on):hover {
+    background: #f3ede2;
+    color: var(--dk-ink);
+  }
+  /* The selected side still answers the pointer. Without this it was the one
+     primary target on the page with no hover state at all. */
+  .dk-toggle button.is-on:hover {
+    background: var(--dk-blue);
+  }
+}
+
+/* --- the surface ------------------------------------------------------- */
+.dk__surface {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem 1rem;
+  align-content: start;
+  min-height: 320px;
+  padding: 1.5rem 1.25rem 5.5rem;
+  border: 2px solid var(--dk-ink);
+  border-radius: 10px;
+  /* Faint grid, like a cutting mat. Cheap: one repeating gradient, no nodes. */
+  background-color: #fffdf9;
+  background-image:
+    linear-gradient(var(--dk-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--dk-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+  box-shadow: inset 0 2px 10px rgb(20 22 26 / 0.04);
+  touch-action: pan-y;
+}
+@media (max-width: 1100px) {
+  .dk__surface {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .dk__surface {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* --- a chip ------------------------------------------------------------ */
+.dk__chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.75rem 0.65rem;
+  border: 2px solid var(--dk-ink);
+  border-radius: 10px;
+  box-shadow: 3px 3px 0 0 var(--dk-ink);
+  cursor: grab;
+  user-select: none;
+  overflow: hidden;
+  /* GSAP owns transform; tilt/jitter ride on the individual properties. */
+  transition: box-shadow 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dk__chip:active {
+  cursor: grabbing;
+}
+@media (hover: hover) {
+  .dk__chip:hover {
+    box-shadow: 5px 5px 0 0 var(--dk-ink);
+  }
+}
+
+.dk__chip-name {
+  font-weight: 700;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk__lock {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.dk__chip-meta {
+  font-size: 0.6875rem;
+  opacity: 0.78;
+}
+
+.dk__chip-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--dk-ink);
+}
+
+.dk__chip-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+.dk__chip-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid currentColor;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    translate 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.15s;
+}
+.dk__chip-actions button svg {
+  width: 13px;
+  height: 13px;
+}
+@media (hover: hover) {
+  .dk__chip-actions button:hover {
+    translate: 0 -2px;
+    background: rgb(255 255 255 / 0.35);
+  }
+}
+
+/* --- the bin ----------------------------------------------------------- */
+.dk__bin {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border: 2px dashed var(--dk-muted);
+  border-radius: 10px;
+  color: var(--dk-muted);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #fffdf9;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background-color 0.2s,
+    scale 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.dk__bin svg {
+  width: 15px;
+  height: 15px;
+}
+.dk__bin.is-over {
+  border-color: var(--dk-danger);
+  border-style: solid;
+  color: #fff;
+  background: var(--dk-danger);
+  scale: 1.08;
+}
+
+/* --- list view --------------------------------------------------------- */
+.dk__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--dk-ink);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.dk__row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+}
+.dk__row + .dk__row {
+  border-top: 2px solid var(--dk-line);
+}
+@media (hover: hover) {
+  .dk__row:hover {
+    background: #fffdf9;
+  }
+}
+.dk__swatch {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--dk-ink);
+  border-radius: 4px;
+}
+.dk__row-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk__row-meta {
+  font-size: 0.6875rem;
+  color: var(--dk-muted);
+  white-space: nowrap;
+}
+.dk__row-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+.dk__row-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid transparent;
+  border-radius: 7px;
+  color: var(--dk-muted);
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    border-color 0.2s,
+    background-color 0.2s;
+}
+.dk__row-actions button svg {
+  width: 14px;
+  height: 14px;
+}
+@media (hover: hover) {
+  .dk__row-actions button:hover {
+    color: var(--dk-ink);
+    border-color: var(--dk-ink);
+    background: #fffdf9;
+  }
+}
+
+/* --- empty ------------------------------------------------------------- */
+.dk__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 300px;
+  padding: 2rem;
+  text-align: center;
+  border: 2px dashed var(--dk-line);
+  border-radius: 10px;
+  background: #fffdf9;
+}
+.dk__empty-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.dk__empty-sub {
+  font-size: 0.875rem;
+  color: var(--dk-muted);
+  max-width: 34ch;
+}
+
+/* --- reduced motion ---------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .dk__chip,
+  .dk__bin,
+  .dk-toggle button,
+  .dk__row-actions button {
+    transition-duration: 0.001ms !important;
+  }
+  /* Dragging is not offered here: the list view is the default and carries a
+     real delete button per row. */
+  .dk__chip {
+    cursor: default;
+  }
+}
+
+/* Image chips show the image behind their label. A scrim keeps the text
+   legible over any photo. */
+.dk__chip-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
+.dk__chip:has(.dk__chip-thumb)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    rgb(20 22 26 / 0.82) 0%,
+    rgb(20 22 26 / 0.35) 55%,
+    rgb(20 22 26 / 0.1) 100%
+  );
+  pointer-events: none;
+}
+.dk__chip:has(.dk__chip-thumb) .dk__chip-name,
+.dk__chip:has(.dk__chip-thumb) .dk__chip-meta,
+.dk__chip:has(.dk__chip-thumb) .dk__chip-actions {
+  position: relative;
+  z-index: 2;
+  color: #fff;
+}
+.dk__chip:has(.dk__chip-thumb) {
+  min-height: 120px;
+  justify-content: flex-end;
+}

@@ -107,16 +107,28 @@ export default function Sidebar({
   return (
     <ShadcnSidebar className="border-r border-slate-200 bg-white select-none text-slate-800">
       <SidebarHeader className="p-4 border-b border-slate-200/50">
-        <div
-          className="flex items-center gap-2.5 text-slate-900 font-bold text-base cursor-pointer hover:opacity-90 transition-opacity"
-          onClick={() => handleNavigation(fetchDefaultRoom)}
-        >
-          <div className="w-9 h-9 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
-            <img src="/favicon.svg" alt="Stash logo" className="w-5 h-5" />
-          </div>
-          <span className="tracking-tight text-slate-900 font-extrabold">
-            Stash
-          </span>
+        {/* The same lockup the marketing page uses: lowercase mono "stash"
+            with a square chip, not a Title Case wordmark with a round avatar.
+            It is also a real link home — the product had no route back. */}
+        <div className="flex items-center justify-between gap-2">
+          <a
+            href="/"
+            className="group/mark flex items-center gap-2 font-mono text-sm font-semibold text-slate-900 min-h-7"
+            aria-label="Stash, home"
+          >
+            <span
+              aria-hidden="true"
+              className="w-2.5 h-2.5 shrink-0 rounded-[3px] border-2 border-slate-900 bg-danger-500 transition-[rotate,background-color] duration-300 group-hover/mark:rotate-45 group-hover/mark:bg-red-500 group-focus-visible/mark:rotate-45"
+            />
+            stash
+          </a>
+          <button
+            type="button"
+            onClick={() => handleNavigation(fetchDefaultRoom)}
+            className="font-mono text-[11px] text-slate-500 hover:text-slate-900 underline underline-offset-2 min-h-7 px-1 cursor-pointer"
+          >
+            Default room
+          </button>
         </div>
       </SidebarHeader>
 
@@ -154,10 +166,13 @@ export default function Sidebar({
                       handleNavigation(() => onChangeMode(item.id))
                     }
                     isActive={activeMode === item.id}
-                    className={`w-full text-left px-2.5 py-2 rounded-xl text-xs flex items-center gap-2.5 transition-all cursor-pointer ${
+                    /* The active item needs its own hover: without one it was
+                       the only primary target on the page that did not react
+                       to the pointer. It lifts, like the landing page's keys. */
+                    className={`w-full text-left px-2.5 py-2 rounded-[10px] text-xs flex items-center gap-2.5 cursor-pointer border-2 transition-[background-color,color,translate,box-shadow] duration-150 ${
                       activeMode === item.id
-                        ? "bg-red-500 hover:bg-red-600 text-white font-semibold shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        ? "bg-red-500 text-white font-semibold border-slate-900 shadow-[2px_2px_0_0_var(--color-slate-900)] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_0_var(--color-slate-900)]"
+                        : "text-slate-600 border-transparent hover:bg-white hover:text-slate-900 hover:border-slate-900"
                     }`}
                   >
                     <span
@@ -198,15 +213,15 @@ export default function Sidebar({
             <div className="flex items-center space-x-1.5 text-slate-400">
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="hover:text-slate-700 transition-colors p-0.5 cursor-pointer"
-                title="Create Room"
+                className="hover:text-slate-900 hover:bg-white hover:border-slate-900 border-2 border-transparent transition-colors p-1 min-w-8 min-h-8 inline-flex items-center justify-center rounded-[8px] cursor-pointer"
+                aria-label="Create Room" title="Create Room"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={onOpenJoinModal}
-                className="hover:text-slate-700 transition-colors p-0.5 cursor-pointer"
-                title="Join Room Manually"
+                className="hover:text-slate-900 hover:bg-white hover:border-slate-900 border-2 border-transparent transition-colors p-1 min-w-8 min-h-8 inline-flex items-center justify-center rounded-[8px] cursor-pointer"
+                aria-label="Join Room Manually" title="Join Room Manually"
               >
                 <KeyRound className="w-3.5 h-3.5" />
               </button>
@@ -240,23 +255,23 @@ export default function Sidebar({
                         e.stopPropagation();
                         onOpenShareForRoom(r.id);
                       }}
-                      className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
-                      title="Share & Security"
+                      className="p-1.5 min-w-7 min-h-7 inline-flex items-center justify-center hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                      aria-label="Share & Security" title="Share & Security"
                     >
                       <Share2 className="w-3 h-3" />
                     </button>
-                    {r.creator_socket_id !== "system" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteRoom(r.id);
-                        }}
-                        className="p-1 hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                        title="Delete Room"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
+                    {/* "My rooms" are rooms this browser created, so we hold a
+                        host token for them. The server re-checks it anyway. */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteRoom(r.id);
+                      }}
+                      className="p-1.5 min-w-7 min-h-7 inline-flex items-center justify-center hover:bg-red-50 rounded-md text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                      aria-label="Delete Room" title="Delete Room"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 </SidebarMenuItem>
               ))}
@@ -302,8 +317,8 @@ export default function Sidebar({
                           e.stopPropagation();
                           onOpenShareForRoom(r.id);
                         }}
-                        className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
-                        title="Share & Security"
+                        className="p-1.5 min-w-7 min-h-7 inline-flex items-center justify-center hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-800 transition-colors cursor-pointer"
+                        aria-label="Share & Security" title="Share & Security"
                       >
                         <Share2 className="w-3 h-3" />
                       </button>
@@ -312,8 +327,8 @@ export default function Sidebar({
                           e.stopPropagation();
                           leaveRoom(r.id);
                         }}
-                        className="p-1 hover:bg-red-50 rounded-md text-slate-400 hover:text-yellow-600 transition-colors cursor-pointer"
-                        title="Leave Room"
+                        className="p-1.5 min-w-7 min-h-7 inline-flex items-center justify-center hover:bg-red-50 rounded-md text-slate-400 hover:text-yellow-600 transition-colors cursor-pointer"
+                        aria-label="Leave Room" title="Leave Room"
                       >
                         <LogOut className="w-3 h-3" />
                       </button>

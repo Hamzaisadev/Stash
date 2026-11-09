@@ -101,7 +101,7 @@ function FileCard({
       className={cn(
         "group relative bg-white transition-colors duration-200",
         isGrid
-          ? "overflow-hidden rounded-xl border border-slate-200 shadow-sm hover:border-slate-300"
+          ? "overflow-hidden rounded-[10px] border-2 border-slate-900 shadow-[2px_2px_0_0_var(--color-slate-900)] hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--color-slate-900)] transition-[translate,box-shadow] duration-150"
           : "flex min-h-16 items-center gap-3 border-b border-slate-100 px-3 py-2.5 hover:bg-slate-50/70",
       )}
     >

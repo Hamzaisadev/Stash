@@ -1,43 +1,30 @@
 import { useState, useEffect, useRef } from "react";
-import { useStash } from "../hooks/useStash.js";
+import { useStash, isBackendConfigured } from "../hooks/useStash.js";
 import {
   filesFromDataTransfer,
   filesFromClipboard,
 } from "../lib/dropzone.js";
 import VoiceRecorder from "../components/VoiceRecorder.jsx";
 import { useMyUploads } from "../hooks/useMyUploads.js";
+import { useNow } from "../hooks/useNow.js";
 import ScreenShare from "../components/ScreenShare.jsx";
-import Sidebar from "../components/Sidebar.jsx";
+import RoomShell from "../components/RoomShell.jsx";
 import GateScreen from "../components/GateScreen.jsx";
 import UploadForm from "../components/UploadForm.jsx";
-import FileListFeed from "../components/FileListFeed.jsx";
+import Desk from "../components/Desk.jsx";
 import ClipboardFeed from "../components/ClipboardFeed.jsx";
+import QrCanvas from "../components/QrCode.jsx";
 
 // Shadcn UI components
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip.jsx";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { copyToClipboard } from "@/lib/utils";
 
 import {
-  Pencil,
-  Share2,
-  Trash2,
   AlertCircle,
   Copy,
   Lock,
-  QrCode,
   X,
   Upload,
   Eye,
@@ -54,9 +41,7 @@ function AppPage() {
     gate,
     myRooms,
     joinedRooms,
-    clientId,
     setRoomId,
-    fetchDefaultRoom,
     fetchRoomDetails,
     refreshFiles,
     uploadProgress,
@@ -64,13 +49,12 @@ function AppPage() {
     downloadFile,
     deleteFile,
     createRoom,
-    deleteRoom: deleteRoomHook,
-    leaveRoom: leaveRoomHook,
+    deleteRoom: handleRoomDelete,
+    leaveRoom: handleRoomLeave,
     joinRoomWithKey,
     requestAccessAcceptOnly,
     approveGuest,
     denyGuest,
-    kickGuest,
     updateRoomSettings,
     rotateStackKey,
     sendClipboard,
@@ -82,24 +66,21 @@ function AppPage() {
   } = useStash();
 
   const { isOwner: isFileOwner } = useMyUploads();
+  // One shared 1s clock drives every expiry countdown on the desk.
+  const now = useNow();
 
-  const isRoomHost =
-    room.creator_socket_id === clientId || room.creator_socket_id === "system";
+  // Authoritative: the server sets is_host by verifying our signed host token.
+  // This used to compare creator_socket_id against a locally-generated client
+  // id, which the server no longer discloses (it was forgeable as a credential).
+  const isRoomHost = !!room.is_host;
 
   // Mode and form states
   const [activeMode, setActiveMode] = useState("files"); // files, clipboard, voice, screen
 
   // Modals state variables
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [joinRoomId, setJoinRoomId] = useState("");
 
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
 
-  const [showShareModal, setShowShareModal] = useState(false);
   const [requests, setRequests] = useState([]);
-  const [approvedUsers, setApprovedUsers] = useState([]);
 
   // Reset access requests and approved list on room changes. Done during
   // render rather than in an effect so the stale list is never painted.
@@ -107,14 +88,8 @@ function AppPage() {
   if (prevRoomId !== room.id) {
     setPrevRoomId(room.id);
     setRequests([]);
-    setApprovedUsers([]);
   }
 
-  const [deleteTargetRoomId, setDeleteTargetRoomId] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [leaveTargetRoomId, setLeaveTargetRoomId] = useState(null);
-  const [isLeaving, setIsLeaving] = useState(false);
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const [unlockingFile, setUnlockingFile] = useState(null);
   const [unlockPassword, setUnlockPassword] = useState("");
@@ -136,6 +111,17 @@ function AppPage() {
       Notification.requestPermission();
     }
   }, []);
+
+  // A title of its own, naming the room and its lifetime. The app previously
+  // shared the marketing page's title verbatim.
+  useEffect(() => {
+    const previous = document.title;
+    const name = room.name || room.id || "stash:default";
+    document.title = `${name} — a Stash room that deletes itself in 24 hours`;
+    return () => {
+      document.title = previous;
+    };
+  }, [room.name, room.id]);
 
   // Sync access requests from socket
   useEffect(() => {
@@ -349,62 +335,12 @@ function AppPage() {
     }
   };
 
-  const handleCopyInviteLink = () =>
-    copyOrWarn(`${window.location.origin}/rooms/${room.id}`, "Invite link");
-
-  const handleCopyRoomId = () => copyOrWarn(room.id, "Room ID");
-
-  // Handle open Share Modal for a specific room
-  const handleOpenShareForRoom = (roomId) => {
-    if (room.id !== roomId) {
-      setRoomId(roomId);
-    }
-    setShowShareModal(true);
-  };
-
-  // Native share sheet trigger
-  const handleNativeShare = async () => {
-    const inviteLink = `${window.location.origin}/rooms/${room.id}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Join Stash Room: ${room.name || "default"}`,
-          text: `Use Stash to share files, clipboard items, and screens instantly in this private room!`,
-          url: inviteLink,
-        });
-      } catch (err) {
-        if (err.name !== "AbortError") {
-          toast.error("Failed to trigger native sharing sheet");
-        }
-      }
-    } else {
-      navigator.clipboard.writeText(inviteLink);
-      toast.success("Invite link copied to clipboard!");
-    }
-  };
-
-  // Rotate Stack Key
-  const handleRotateKey = async () => {
-    const res = await rotateStackKey(room.id);
-    if (res.success) {
-      toast.success(`Rotated Stack Key to: ${res.stack_key}`);
-    } else {
-      toast.error(res.error || "Failed to rotate stack key");
-    }
-  };
 
   // Handle Guest approvals
   const handleApprove = (guestClientId, guestSocketId, guestName = "Guest") => {
     approveGuest(room.id, guestSocketId, guestClientId);
     setRequests((prev) => prev.filter((r) => r.clientId !== guestClientId));
-    setApprovedUsers((prev) => {
-      if (prev.find((u) => u.clientId === guestClientId)) return prev;
-      return [
-        ...prev,
-        { clientId: guestClientId, socketId: guestSocketId, name: guestName },
-      ];
-    });
-    toast.success(`${guestName} approved!`);
+    toast.success(`${guestName} is in.`);
   };
 
   const handleDeny = (guestClientId, guestSocketId) => {
@@ -413,31 +349,8 @@ function AppPage() {
     toast.error("Guest access denied!");
   };
 
-  const handleKick = (guestClientId, guestSocketId, guestName = "Guest") => {
-    kickGuest(room.id, guestSocketId, guestClientId);
-    setApprovedUsers((prev) =>
-      prev.filter((u) => u.clientId !== guestClientId),
-    );
-    toast.error(`${guestName} has been removed from the room.`);
-  };
 
   // Edit Room Settings handler
-  const handleEditRoomSubmit = async (e) => {
-    e.preventDefault();
-    if (!editName.trim()) return toast.error("Room name is required");
-    setIsSavingEdit(true);
-    const res = await updateRoomSettings(room.id, {
-      name: editName.trim(),
-      description: editDescription.trim(),
-    });
-    setIsSavingEdit(false);
-    if (res.success) {
-      toast.success("Room details updated successfully!");
-      setShowEditModal(false);
-    } else {
-      toast.error(res.error || "Failed to update room details");
-    }
-  };
 
   // Locked files submit unlock password
   const handleUnlockSubmit = async () => {
@@ -453,891 +366,275 @@ function AppPage() {
     }
   };
 
-  // Qr codes server URL for files.
   // Room-scoped: a bare `?download=<id>` lands the scanner in *their* default
   // room, where the file doesn't exist and the download silently never fires.
   const getFileShareLink = (fileId) =>
     `${window.location.origin}/rooms/${room.id}?download=${fileId}`;
 
-  // qzone=2 adds the quiet zone scanners need; without it phone cameras
-  // often fail to lock on. Size matches the rendered box to avoid rescaling.
-  const getQrCodeUrl = (fileId) =>
-    `https://api.qrserver.com/v1/create-qr-code/?size=320x320&qzone=2&color=ef4444&bgcolor=ffffff&data=${encodeURIComponent(
-      getFileShareLink(fileId),
-    )}`;
+  // A production build with no VITE_BACKEND_URL can't reach an API at all.
+  // Say so instead of presenting a UI whose every action fails.
+  if (!isBackendConfigured) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-6 font-sans">
+        <div className="max-w-md text-center space-y-3">
+          <h1 className="text-xl font-bold text-slate-900">
+            Stash isn&apos;t configured
+          </h1>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            This deployment has no backend URL set, so files can&apos;t be
+            uploaded or downloaded. If you run this instance, set{" "}
+            <code className="bg-slate-200 px-1.5 py-0.5 rounded text-[13px]">
+              VITE_BACKEND_URL
+            </code>{" "}
+            to your deployed backend origin and redeploy.
+          </p>
+          <a
+            href="https://github.com/Hamzaisadev/Stash#self-hosting--local-development"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-sm font-semibold text-red-600 hover:text-red-700 underline"
+          >
+            Setup instructions
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 font-sans selection:bg-red-100 selection:text-red-700">
-        <Sidebar
+    <TooltipProvider delay={300}>
+      {gate ? (
+        <GateScreen
+          gate={gate}
+          joinRoomWithKey={joinRoomWithKey}
+          requestAccessAcceptOnly={requestAccessAcceptOnly}
+          fetchRoomDetails={fetchRoomDetails}
+        />
+      ) : (
+        <RoomShell
+          room={room}
           myRooms={myRooms}
           joinedRooms={joinedRooms}
-          currentRoomId={room.id}
-          setRoomId={setRoomId}
-          createRoom={createRoom}
-          deleteRoom={(id) => setDeleteTargetRoomId(id)}
-          leaveRoom={(id) => setLeaveTargetRoomId(id)}
-          onOpenJoinModal={() => setShowJoinModal(true)}
-          fetchDefaultRoom={fetchDefaultRoom}
           activeMode={activeMode}
           onChangeMode={setActiveMode}
-          roomFileCount={room.files.length}
-          clipboardCount={clipboard.length}
-          onOpenShareForRoom={handleOpenShareForRoom}
-        />
-
-        <div className="flex-grow flex flex-col relative h-full overflow-y-auto">
-          {gate ? (
-            <GateScreen
-              gate={gate}
-              joinRoomWithKey={joinRoomWithKey}
-              requestAccessAcceptOnly={requestAccessAcceptOnly}
-              fetchRoomDetails={fetchRoomDetails}
-            />
-          ) : (
-            <div className="pb-32 pt-6 px-4">
-              <div className="max-w-2xl mx-auto space-y-6">
-                {/* Notion-style Page Header */}
-                <header className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 sm:pb-4 sm:mb-6 text-left animate-fadeIn">
-                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                    {/* Mobile hamburger — only visible on small screens */}
-                    <SidebarTrigger className="md:hidden text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg p-1 sm:p-1.5 cursor-pointer shrink-0" />
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
-                          {room.name || "stash:default"}
-                        </h1>
-                        {room.id && room.id !== "undefined" && (
-                          <button
-                            onClick={() => {
-                              setEditName(room.name || "");
-                              setEditDescription(room.description || "");
-                              setShowEditModal(true);
-                            }}
-                            className="text-slate-400 hover:text-slate-700 transition-colors p-0.5 sm:p-1 shrink-0"
-                            title="Edit Room Info"
-                          >
-                            <Pencil className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                      {room.description && (
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate max-w-[140px] sm:max-w-none">
-                          {room.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-1.5 sm:space-x-3 bg-white border border-slate-200 rounded-lg sm:rounded-xl px-2 py-1 sm:px-3 sm:py-1.5 shadow-sm shrink-0">
-                    <button
-                      onClick={() => setShowShareModal(true)}
-                      className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                      title="Share Room & Access Settings"
-                    >
-                      <Share2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                    </button>
-
-                    {isRoomHost &&
-                      room.creator_socket_id !== "system" &&
-                      room.id &&
-                      room.id !== "undefined" && (
-                        <button
-                          onClick={() => setDeleteTargetRoomId(room.id)}
-                          className="p-1 sm:p-1.5 rounded-lg text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                          title="Delete Room"
-                        >
-                          <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                        </button>
-                      )}
-                  </div>
-                </header>
-
-                {/* Global errors banner */}
-                {status.error && (
-                  <div className="bg-red-50 border border-red-100 text-red-600 rounded-xl p-3 flex items-center space-x-2 text-xs">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{status.error}</span>
-                  </div>
-                )}
-
-                {/* ==========================================
-                    Interactive Content Feeds Switcher
-                    ========================================== */}
-                <main className="space-y-6">
-                  {/* A. Files Mode viewport */}
-                  {activeMode === "files" && (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-                        <UploadForm
-                          uploadFile={uploadFile}
-                          isUploading={status.isUploading}
-                          uploadProgress={uploadProgress}
-                        />
-                        <VoiceRecorder
-                          onUpload={uploadFile}
-                          isUploading={status.isVoiceUploading}
-                          uploadProgress={uploadProgress}
-                        />
-                      </div>
-                      <FileListFeed
-                        room={room}
-                        downloadProgress={downloadProgress}
-                        onDownload={handleDownloadInitiation}
-                        onDelete={deleteFile}
-                        onQr={setActiveQrFile}
-                        fetchPreviewUrl={fetchPreviewUrl}
-                        refreshFiles={refreshFiles}
-                        isOwner={isFileOwner}
-                        isLoading={status.isLoading}
-                      />
-                    </div>
-                  )}
-
-                  {/* B. Clipboard sync viewport */}
-                  {activeMode === "clipboard" && (
-                    <ClipboardFeed
-                      clipboard={clipboard}
-                      sendClipboard={sendClipboard}
-                      clearClipboard={clearClipboard}
-                      isRoomHost={isRoomHost}
-                    />
-                  )}
-
-                  {/* C. Screen Share viewport */}
-                  {activeMode === "screen" && (
-                    <div className="animate-scaleUp">
-                      <ScreenShare
-                        isSharing={screenShare.isSharing}
-                        stream={screenShare.stream}
-                        remoteStream={screenShare.remoteStream}
-                        shareType={screenShare.shareType}
-                        onStart={startScreenShare}
-                        onStartWebcam={startWebcamShare}
-                        onStop={stopScreenShare}
-                      />
-                    </div>
-                  )}
-                </main>
-
-                {/* File Password unlock modal */}
-                <Dialog
-                  open={!!unlockingFile}
-                  onOpenChange={() => setUnlockingFile(null)}
-                >
-                  <DialogContent className="bg-white border-slate-200 max-w-xs text-slate-900">
-                    <DialogHeader>
-                      <DialogTitle className="text-sm font-bold flex items-center gap-2 text-red-500">
-                        <Lock className="w-4 h-4 text-red-500" />
-                        Unlocking File
-                      </DialogTitle>
-                      <DialogDescription className="text-[10px] text-slate-500 leading-normal">
-                        This file{" "}
-                        <span className="font-semibold text-slate-800 font-mono">
-                          {unlockingFile?.filename}
-                        </span>{" "}
-                        is protected. Enter the decryption password.
-                      </DialogDescription>
-                    </DialogHeader>
-
-                    {downloadError && (
-                      <div className="bg-red-50 border border-red-100 text-red-600 rounded-lg p-2.5 text-[10px] text-left">
-                        {downloadError}
-                      </div>
-                    )}
-
-                    <div className="relative">
-                      <Input
-                        type={showUnlockPassword ? "text" : "password"}
-                        value={unlockPassword}
-                        onChange={(e) => setUnlockPassword(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && handleUnlockSubmit()
-                        }
-                        placeholder="Password"
-                        autoFocus
-                        className="bg-white border-slate-200 text-slate-800 text-xs pr-10 focus:ring-red-500/50 focus:border-red-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowUnlockPassword(!showUnlockPassword)
-                        }
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                        title={
-                          showUnlockPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showUnlockPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
-
-                    <DialogFooter className="flex items-center space-x-2 pt-1">
-                      <Button
-                        variant="secondary"
-                        onClick={() => setUnlockingFile(null)}
-                        className="flex-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={handleUnlockSubmit}
-                        className="flex-1 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold cursor-pointer"
-                      >
-                        Unlock
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-
-                {/* QR Code popover modal */}
-                <Dialog
-                  open={!!activeQrFile}
-                  onOpenChange={() => setActiveQrFile(null)}
-                >
-                  <DialogContent className="bg-white border-slate-200 max-w-xs text-slate-900 text-center">
-                    <DialogHeader className="flex flex-col items-center text-center">
-                      <QrCode className="w-5 h-5 text-red-500 mb-1" />
-                      <DialogTitle className="text-sm font-bold">
-                        Scan to Download
-                      </DialogTitle>
-                      <DialogDescription className="text-[10px] text-slate-500 max-w-xs px-2 leading-normal">
-                        Point any phone camera to download{" "}
-                        <span className="font-semibold text-slate-800 font-mono">
-                          {activeQrFile?.filename}
-                        </span>{" "}
-                        directly.
-                      </DialogDescription>
-                    </DialogHeader>
-
-                    {activeQrFile && (
-                      <div className="bg-slate-50 p-3.5 border border-slate-200 rounded-xl inline-block shadow-sm mx-auto my-2">
-                        <img
-                          src={getQrCodeUrl(activeQrFile.id)}
-                          alt="QR code"
-                          className="w-40 h-40 rounded-lg"
-                        />
-                      </div>
-                    )}
-
-                    {activeQrFile && (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="text-[11px] font-mono text-slate-500 truncate max-w-xs mx-auto select-all">
-                          {getFileShareLink(activeQrFile.id)}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs"
-                          onClick={() =>
-                            copyOrWarn(
-                              getFileShareLink(activeQrFile.id),
-                              "Download link",
-                            )
-                          }
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          Copy link
-                        </Button>
-                      </div>
-                    )}
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modals & Popovers */}
-
-        {/* 1. Join Room Modal */}
-        <Dialog open={showJoinModal} onOpenChange={setShowJoinModal}>
-          <DialogContent className="bg-white border-slate-200 text-slate-900">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">
-                Join Room Manually
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Enter the exact Room ID to sync and access its feed files.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!joinRoomId.trim())
-                  return toast.error("Room ID is required");
-                setShowJoinModal(false);
-                setRoomId(joinRoomId.trim());
-                setJoinRoomId("");
-              }}
-              className="space-y-4 text-xs text-slate-700"
-            >
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Room ID
-                </label>
-                <Input
-                  type="text"
-                  autoFocus
-                  placeholder="Enter Room ID"
-                  value={joinRoomId}
-                  onChange={(e) => setJoinRoomId(e.target.value)}
-                  className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-              <DialogFooter className="flex justify-end space-x-3 pt-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setShowJoinModal(false)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold cursor-pointer"
-                >
-                  Join
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* 2. Edit Room Info Modal */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="bg-white border-slate-200 text-slate-900">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">
-                Edit Room Info
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Change the room name and workspace descriptions shown to guests.
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              onSubmit={handleEditRoomSubmit}
-              className="space-y-4 text-xs text-slate-700"
-            >
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Room Name
-                </label>
-                <Input
-                  type="text"
-                  autoFocus
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Description
-                </label>
-                <Textarea
-                  rows={2}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="bg-white border-slate-200 text-slate-800 text-xs focus:ring-red-500 focus:border-red-500 resize-none"
-                />
-              </div>
-              <DialogFooter className="flex justify-end space-x-3 pt-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isSavingEdit}
-                  onClick={() => setShowEditModal(false)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSavingEdit}
-                  className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold cursor-pointer min-w-[100px]"
-                >
-                  {isSavingEdit ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Saving...
+          counts={{ files: room.files.length, clipboard: clipboard.length }}
+          isHost={isRoomHost}
+          isLive={screenShare.isSharing || Boolean(screenShare.remoteStream)}
+          onSwitchRoom={setRoomId}
+          onCreateRoom={createRoom}
+          onJoinRoom={(id) => setRoomId(id)}
+          onUpdateRoom={updateRoomSettings}
+          onDeleteRoom={handleRoomDelete}
+          onLeaveRoom={handleRoomLeave}
+          onRotateKey={rotateStackKey}
+        >
+          {/* Access requests: inline, not a dialog. They need answering while
+              you keep working, so they sit above the content. */}
+          {requests.length > 0 && (
+            <section className="rq" aria-label="People waiting to join">
+              {requests.map((r) => (
+                <div className="rq__row" key={r.clientId}>
+                  <span className="rq__who">
+                    <strong>{r.guestName || "Someone"}</strong> wants in
+                    <span className="rq__id lp-mono">
+                      {r.clientId.slice(0, 10)}…
                     </span>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* 3. Share Room & Security Settings Modal */}
-        <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
-          <DialogContent className="bg-white border-slate-200 text-slate-900 max-h-[90vh] overflow-y-auto pr-2">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Share2 className="w-4 h-4 text-red-500" />
-                Share Room & Security Settings
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Generate invite options, QR scans, and protect access
-                permissions.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-5 text-xs text-slate-700">
-              {/* Dynamic QR code section */}
-              <div className="flex flex-col items-center space-y-2 bg-slate-50 border border-slate-200 rounded-2xl p-4 shadow-sm">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=ef4444&bgcolor=ffffff&data=${encodeURIComponent(`${window.location.origin}/rooms/${room.id}`)}`}
-                  alt="Room QR Code"
-                  className="w-36 h-36 rounded-lg"
-                />
-                <span className="text-[10px] text-slate-500 font-medium">
-                  Scan QR to join room instantly
-                </span>
-              </div>
-
-              {/* Share Link trigger */}
-              <Button
-                onClick={handleNativeShare}
-                className="w-full font-semibold cursor-pointer bg-red-500 hover:bg-red-600 text-white"
-              >
-                <Share2 className="w-4 h-4 mr-2" />
-                Share Link
-              </Button>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Invite Link
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    type="text"
-                    readOnly
-                    value={`${window.location.origin}/rooms/${room.id}`}
-                    className="flex-grow bg-white border-slate-200 text-slate-800 text-[11px] focus:ring-red-500 focus:border-red-500"
-                  />
-                  <Button
-                    onClick={handleCopyInviteLink}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer shrink-0"
-                  >
-                    Copy
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Room ID
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    type="text"
-                    readOnly
-                    value={room.id}
-                    className="flex-grow bg-white border-slate-200 text-slate-800 text-[11px] font-mono focus:ring-red-500 focus:border-red-500"
-                  />
-                  <Button
-                    onClick={handleCopyRoomId}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer shrink-0"
-                  >
-                    Copy
-                  </Button>
-                </div>
-              </div>
-
-              {isRoomHost && (
-                <div className="border-t border-slate-200 pt-4 space-y-4">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-left">
-                    Host Security Controls
-                  </label>
-
-                  {/* Private Room (Stash Key) Checkbox */}
-                  <div className="space-y-3 border border-slate-200 bg-slate-50 p-3 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs text-slate-800 font-semibold">
-                          Private Room (Stash Key)
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Require guests to input a rotating Stash Key
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={!!room.is_protected}
-                        onChange={async (e) => {
-                          const checked = e.target.checked;
-                          const res = await updateRoomSettings(room.id, {
-                            is_protected: checked,
-                          });
-                          if (res.success) {
-                            toast.success(
-                              checked
-                                ? "Room set to Private"
-                                : "Private access disabled",
-                            );
-                          } else {
-                            toast.error("Failed to update Private status");
-                          }
-                        }}
-                        className="w-4 h-4 accent-red-500 rounded cursor-pointer animate-none"
-                      />
-                    </div>
-                    {room.is_protected && (
-                      <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 text-left animate-slideDown">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            Stash Key Pin
-                          </span>
-                          <span className="text-[11px] font-mono font-bold text-red-500 tracking-widest bg-red-50 px-2 py-0.5 rounded">
-                            {room.stack_key || "------"}
-                          </span>
-                        </div>
-                        <Button
-                          onClick={handleRotateKey}
-                          className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold cursor-pointer h-7"
-                        >
-                          Rotate Stack Key
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Manual Approval (Accept Only) Checkbox */}
-                  <div className="space-y-3 border border-slate-200 bg-slate-50 p-3 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col text-left">
-                        <span className="text-xs text-slate-800 font-semibold">
-                          Manual Approval (Accept Only)
-                        </span>
-                        <span className="text-[10px] text-slate-500">
-                          Require host to approve each join request
-                        </span>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={!!room.accept_only}
-                        onChange={async (e) => {
-                          const checked = e.target.checked;
-                          const res = await updateRoomSettings(room.id, {
-                            accept_only: checked,
-                          });
-                          if (res.success) {
-                            toast.success(
-                              checked
-                                ? "Manual approval enabled"
-                                : "Manual approval disabled",
-                            );
-                          } else {
-                            toast.error("Failed to update approval mode");
-                          }
-                        }}
-                        className="w-4 h-4 accent-red-500 rounded cursor-pointer animate-none"
-                      />
-                    </div>
-                    {room.accept_only && requests.length > 0 && (
-                      <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-2 text-left animate-slideDown">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                          Access Requests
-                          <span className="bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                            {requests.length}
-                          </span>
-                        </span>
-                        <ul className="space-y-1.5 max-h-40 overflow-y-auto">
-                          {requests.map((req) => (
-                            <li
-                              key={req.clientId}
-                              className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
-                            >
-                              <div className="flex flex-col truncate pr-2">
-                                <span className="font-semibold text-slate-800 truncate">
-                                  {req.guestName}
-                                </span>
-                                <span className="text-[9px] text-slate-500 font-mono truncate">
-                                  {req.clientId.substring(0, 10)}...
-                                </span>
-                              </div>
-                              <div className="flex gap-1.5">
-                                <Button
-                                  size="xs"
-                                  onClick={() =>
-                                    handleApprove(
-                                      req.clientId,
-                                      req.guestSocketId,
-                                    )
-                                  }
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
-                                >
-                                  Allow
-                                </Button>
-                                <Button
-                                  size="xs"
-                                  variant="destructive"
-                                  onClick={() =>
-                                    handleDeny(req.clientId, req.guestSocketId)
-                                  }
-                                  className="text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
-                                >
-                                  Deny
-                                </Button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* 4. Custom Delete Room Modal */}
-        <Dialog
-          open={!!deleteTargetRoomId}
-          onOpenChange={(open) => {
-            if (!isDeleting)
-              setDeleteTargetRoomId(open ? deleteTargetRoomId : null);
-          }}
-        >
-          <DialogContent className="bg-white border-slate-200 text-slate-900">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">
-                Delete Room
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Are you sure you want to delete this room? This action is
-                permanent and will immediately delete all files from storage.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex justify-end space-x-3 pt-2">
-              <Button
-                variant="secondary"
-                disabled={isDeleting}
-                onClick={() => setDeleteTargetRoomId(null)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={isDeleting}
-                onClick={async () => {
-                  setIsDeleting(true);
-                  const res = await deleteRoomHook(deleteTargetRoomId);
-                  setIsDeleting(false);
-                  setDeleteTargetRoomId(null);
-                  if (res && res.success) {
-                    toast.success("Room deleted successfully");
-                  } else {
-                    toast.error("Failed to delete room");
-                  }
-                }}
-                className="text-white text-xs font-semibold cursor-pointer min-w-[90px]"
-              >
-                {isDeleting ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Deleting...
                   </span>
-                ) : (
-                  "Yes, Delete"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* 5. Custom Leave Room Modal */}
-        <Dialog
-          open={!!leaveTargetRoomId}
-          onOpenChange={(open) => {
-            if (!isLeaving)
-              setLeaveTargetRoomId(open ? leaveTargetRoomId : null);
-          }}
-        >
-          <DialogContent className="bg-white border-slate-200 text-slate-900">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-bold text-slate-900">
-                Leave Room
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Are you sure you want to leave this room? It will be removed
-                from your sidebar list but the room itself will continue to
-                exist.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="flex justify-end space-x-3 pt-2">
-              <Button
-                variant="secondary"
-                disabled={isLeaving}
-                onClick={() => setLeaveTargetRoomId(null)}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={isLeaving}
-                onClick={async () => {
-                  setIsLeaving(true);
-                  leaveRoomHook(leaveTargetRoomId);
-                  await new Promise((r) => setTimeout(r, 400));
-                  setIsLeaving(false);
-                  setLeaveTargetRoomId(null);
-                  toast.success("Left room successfully");
-                }}
-                className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-semibold cursor-pointer min-w-[80px]"
-              >
-                {isLeaving ? (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Leaving...
+                  <span className="rq__acts">
+                    <button
+                      type="button"
+                      className="rs__btn"
+                      onClick={() =>
+                        handleApprove(r.clientId, r.guestSocketId, r.guestName)
+                      }
+                    >
+                      Let them in
+                    </button>
+                    <button
+                      type="button"
+                      className="rs__btn rs__btn--ghost"
+                      onClick={() => handleDeny(r.clientId, r.guestSocketId)}
+                    >
+                      Deny
+                    </button>
                   </span>
-                ) : (
-                  "Yes, Leave"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                </div>
+              ))}
+            </section>
+          )}
 
-        {/* Floating Access / Member Management Panel */}
-        {(requests.length > 0 || approvedUsers.length > 0) && (
-          <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-4 animate-slideUp text-slate-900 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                Room Security Controls
-              </span>
+          {/* Connection trouble reads as a quiet strip, not a red wall. The
+              slot keeps its place so nothing shifts when it appears. */}
+          <div
+            role="status"
+            aria-live="polite"
+            className={`rs-alert ${status.error ? "is-on" : ""}`}
+          >
+            {status.error && (
+              <>
+                <AlertCircle aria-hidden="true" />
+                <span>{status.error}</span>
+              </>
+            )}
+          </div>
+
+          {/* ── FILES ─────────────────────────────────────── */}
+          {activeMode === "files" && (
+            <>
+              <UploadForm
+                onUpload={uploadFile}
+                isUploading={status.isUploading}
+                uploadProgress={uploadProgress}
+              />
+              <Desk
+                files={room.files}
+                isOwner={isFileOwner}
+                onDownload={handleDownloadInitiation}
+                onDelete={deleteFile}
+                onShowQr={setActiveQrFile}
+                downloadProgress={downloadProgress}
+                now={now}
+                refreshFiles={refreshFiles}
+                fetchPreviewUrl={fetchPreviewUrl}
+              />
+              <VoiceRecorder
+                onUpload={uploadFile}
+                isUploading={status.isVoiceUploading}
+                uploadProgress={uploadProgress}
+              />
+            </>
+          )}
+
+          {/* ── CLIPBOARD ─────────────────────────────────── */}
+          {activeMode === "clipboard" && (
+            <ClipboardFeed
+              clipboard={clipboard}
+              onSend={sendClipboard}
+              onClear={clearClipboard}
+            />
+          )}
+
+          {/* ── SCREEN ────────────────────────────────────── */}
+          {activeMode === "screen" && (
+            <ScreenShare
+              isSharing={screenShare.isSharing}
+              stream={screenShare.stream}
+              remoteStream={screenShare.remoteStream}
+              shareType={screenShare.shareType}
+              onStart={startScreenShare}
+              onStartWebcam={startWebcamShare}
+              onStop={stopScreenShare}
+            />
+          )}
+        </RoomShell>
+      )}
+
+      {/* Page-wide drop overlay */}
+      {isDraggingPage && (
+        <div className="drop-veil" aria-hidden="true">
+          <div className="drop-veil__inner">
+            <Upload />
+            <p>Drop to stash it</p>
+          </div>
+        </div>
+      )}
+
+      {/* QR stays a popover: it is a thing you hold a phone up to. */}
+      {activeQrFile && (
+        <div
+          className="qr-pop"
+          role="dialog"
+          aria-label={`QR code for ${activeQrFile.filename}`}
+        >
+          <button
+            type="button"
+            className="qr-pop__x"
+            onClick={() => setActiveQrFile(null)}
+            aria-label="Close QR code"
+          >
+            <X aria-hidden="true" />
+          </button>
+          <QrCanvas
+            value={getFileShareLink(activeQrFile.id)}
+            size={320}
+            alt={`QR code linking to ${activeQrFile.filename}`}
+            className="qr-pop__img"
+          />
+          <p className="qr-pop__name">{activeQrFile.filename}</p>
+          <button
+            type="button"
+            className="rs__btn rs__btn--ghost"
+            onClick={() => copyOrWarn(getFileShareLink(activeQrFile.id), "link")}
+          >
+            <Copy aria-hidden="true" /> Copy link
+          </button>
+        </div>
+      )}
+
+      {/* Unlock prompt for password-protected files. */}
+      {unlockingFile && (
+        <div className="qr-pop" role="dialog" aria-label="This file is locked">
+          <button
+            type="button"
+            className="qr-pop__x"
+            onClick={() => {
+              setUnlockingFile(null);
+              setUnlockPassword("");
+              setDownloadError(null);
+            }}
+            aria-label="Cancel"
+          >
+            <X aria-hidden="true" />
+          </button>
+          <p className="qr-pop__name">
+            <Lock aria-hidden="true" /> {unlockingFile.filename}
+          </p>
+          <form
+            className="rs__form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleUnlockSubmit();
+            }}
+          >
+            <label className="rs__field">
+              <span>Password</span>
+              <input
+                type={showUnlockPassword ? "text" : "password"}
+                value={unlockPassword}
+                onChange={(e) => setUnlockPassword(e.target.value)}
+                autoFocus
+              />
+            </label>
+            {downloadError && (
+              <p className="rs__hint rs__hint--bad">{downloadError}</p>
+            )}
+            <div className="rs__panel-actions">
               <button
-                onClick={() => {
-                  setRequests([]);
-                  setApprovedUsers([]);
-                }}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-0.5 cursor-pointer"
-                title="Dismiss panel"
+                type="submit"
+                className="rs__btn"
+                disabled={!unlockPassword}
               >
-                <X className="w-4 h-4" />
+                Unlock and download
+              </button>
+              <button
+                type="button"
+                className="rs__btn rs__btn--ghost"
+                onClick={() => setShowUnlockPassword((v) => !v)}
+              >
+                {showUnlockPassword ? (
+                  <EyeOff aria-hidden="true" />
+                ) : (
+                  <Eye aria-hidden="true" />
+                )}
+                {showUnlockPassword ? "Hide" : "Show"}
               </button>
             </div>
+          </form>
+        </div>
+      )}
 
-            {/* Pending Requests Section */}
-            {requests.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-left">
-                  Pending Requests ({requests.length})
-                </span>
-                <ul className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {requests.map((req) => (
-                    <li
-                      key={req.clientId}
-                      className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
-                    >
-                      <div className="flex flex-col truncate pr-2 text-left">
-                        <span className="font-semibold text-slate-800 truncate">
-                          {req.guestName}
-                        </span>
-                        <span className="text-[9px] text-slate-500 font-mono truncate">
-                          {req.clientId.substring(0, 10)}...
-                        </span>
-                      </div>
-                      <div className="flex gap-1.5 shrink-0">
-                        <Button
-                          size="xs"
-                          onClick={() =>
-                            handleApprove(
-                              req.clientId,
-                              req.guestSocketId,
-                              req.guestName,
-                            )
-                          }
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
-                        >
-                          Allow
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="destructive"
-                          onClick={() =>
-                            handleDeny(req.clientId, req.guestSocketId)
-                          }
-                          className="text-white text-[9px] px-2 py-0.5 cursor-pointer h-6"
-                        >
-                          Deny
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Active Members Section */}
-            {approvedUsers.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block text-left">
-                  Active Guests ({approvedUsers.length})
-                </span>
-                <ul className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {approvedUsers.map((user) => (
-                    <li
-                      key={user.clientId}
-                      className="flex items-center justify-between text-[11px] p-2 bg-slate-50 border border-slate-100 rounded-lg"
-                    >
-                      <div className="flex flex-col truncate pr-2 text-left">
-                        <span className="font-semibold text-slate-800 truncate">
-                          {user.name}
-                        </span>
-                        <span className="text-[9px] text-slate-500 font-mono truncate">
-                          {user.clientId.substring(0, 10)}...
-                        </span>
-                      </div>
-                      <Button
-                        size="xs"
-                        variant="destructive"
-                        onClick={() =>
-                          handleKick(user.clientId, user.socketId, user.name)
-                        }
-                        className="bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-[9px] px-2 py-0.5 cursor-pointer h-6 border border-red-200"
-                      >
-                        Remove
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Full-screen drag overlay */}
-        {isDraggingPage && (
-          <div className="fixed inset-0 bg-white/70 backdrop-blur-md z-[9999] flex flex-col items-center justify-center border-4 border-dashed border-red-500/50 m-4 rounded-3xl pointer-events-none animate-fadeIn">
-            <div className="bg-white/80 p-8 rounded-2xl shadow-xl flex flex-col items-center border border-slate-100">
-              <Upload className="w-16 h-16 text-red-500 animate-bounce mb-4" />
-              <p className="text-xl font-bold text-slate-800">
-                Drop files anywhere to stash
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Files will be uploaded directly to this room
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Sonner Toast Provider */}
-        <Toaster position="top-right" richColors closeButton />
-      </div>
-    </SidebarProvider>
+      <Toaster position="bottom-center" richColors closeButton />
+    </TooltipProvider>
   );
 }
 

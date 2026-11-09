@@ -163,7 +163,7 @@ function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-between p-8 bg-white border border-slate-200 rounded-2xl shadow-sm animate-scaleUp h-full text-center min-h-[340px]">
+    <div className="flex flex-col items-center justify-between p-5 bg-white border-2 border-slate-900 rounded-[10px] shadow-[3px_3px_0_0_var(--color-slate-900)] animate-scaleUp h-full text-center min-h-[180px]">
       {/* Top Header Section */}
       <div className="text-center text-slate-500 w-full">
         <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">
@@ -186,7 +186,9 @@ function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
               className="w-1 rounded-full transition-[height] duration-75 ease-out"
               style={{
                 height: `${h}px`,
-                backgroundColor: isRecording ? "#ef4444" : "#cbd5e1",
+                backgroundColor: isRecording
+                  ? "var(--color-danger-500)"
+                  : "var(--color-slate-300)",
                 transformOrigin: "center",
               }}
             />
@@ -199,10 +201,14 @@ function VoiceRecorder({ onUpload, isUploading, uploadProgress }) {
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
             disabled={isUploading}
+            /* Icon-only, so it needs an explicit name. It also changes
+               meaning while recording, so the name changes with it. */
+            aria-label={isRecording ? "Stop recording" : "Start recording a voice note"}
+            aria-pressed={isRecording}
             className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 relative focus:outline-none cursor-pointer ${
               isRecording
-                ? "bg-red-500 text-white shadow-lg shadow-red-500/20 scale-105 animate-pulse-soft"
-                : "bg-red-50 text-red-500 hover:bg-red-500 hover:text-white border border-red-100 shadow-sm"
+                ? "bg-danger-500 text-white border-2 border-slate-900 shadow-[3px_3px_0_0_var(--color-slate-900)] scale-105 animate-pulse-soft"
+                : "bg-white text-red-500 border-2 border-slate-900 shadow-[3px_3px_0_0_var(--color-slate-900)] hover:bg-red-500 hover:text-white hover:-translate-y-0.5"
             }`}
           >
             {isRecording ? (
