@@ -49,7 +49,7 @@ variables.** See [Upgrading](#upgrading-to-200) below.
 - Live unread counts on the Files, Clipboard and Screen modes, so activity in one is visible
   from another.
 - A designed 404 page, legal pages, `robots.txt`, `sitemap.xml` and an OG image.
-- `CHANGELOG.md`, [`ROADMAP.md`](ROADMAP.md) (the next 14 updates), [`DESIGN.md`](DESIGN.md)
+- `CHANGELOG.md`, [`ROADMAP.md`](docs/ROADMAP.md) (the next 14 updates), [`DESIGN.md`](docs/DESIGN.md)
   (design system and decisions log) and a `LICENSE`.
 - GitHub Actions CI: backend tests, frontend lint and a production build on every push and PR.
 - 22 unit tests covering token generation, host verification, key hashing and CORS.
@@ -118,7 +118,7 @@ of the entry bundle, and preloading the hashed Latin font subsets from a Vite pl
 
 ### Known limitations
 
-Carried into [`ROADMAP.md`](ROADMAP.md) rather than hidden:
+Carried into [`ROADMAP.md`](docs/ROADMAP.md) rather than hidden:
 
 - WebRTC uses STUN only, so peer-to-peer and screen share fail behind symmetric NAT, which
   includes most mobile carriers. A TURN relay is roadmap item 02.

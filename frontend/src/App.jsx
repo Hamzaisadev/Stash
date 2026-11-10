@@ -16,9 +16,12 @@ const Privacy = lazy(() =>
 const Terms = lazy(() =>
   import('./pages/Legal.jsx').then((m) => ({ default: m.Terms })),
 );
+const Pricing = lazy(() => import('./pages/Pricing.jsx'));
 
 // Static pages that must not be treated as room names by normalizePath().
-const RESERVED_PATHS = new Set(['/privacy', '/terms']);
+// /pricing matches ROOM_ID_PATH, so without this it would be rewritten to
+// /rooms/pricing and open an empty room.
+const RESERVED_PATHS = new Set(['/privacy', '/terms', '/pricing']);
 
 /**
  * A legacy flat room link is a single path segment shaped like a room id:
@@ -93,6 +96,8 @@ function App() {
     page = <Privacy />;
   } else if (currentRoute === '/terms') {
     page = <Terms />;
+  } else if (currentRoute === '/pricing') {
+    page = <Pricing />;
   } else if (
     currentRoute === '/rooms' ||
     currentRoute.startsWith('/rooms/') ||

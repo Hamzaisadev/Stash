@@ -127,6 +127,9 @@ export default function Landing() {
             <a className="lp-nav-link lp-nav-secondary" href="#limits">
               Limits
             </a>
+            <a className="lp-nav-link lp-nav-secondary" href="/pricing">
+              Pricing
+            </a>
             <a className="lp-nav-link" href="/rooms">
               Open app
             </a>
@@ -145,6 +148,7 @@ export default function Landing() {
                 <a href="#how">How it works</a>
                 <a href="#carries">What it carries</a>
                 <a href="#limits">Limits</a>
+                <a href="/pricing">Pricing</a>
               </div>
             </details>
           </nav>
@@ -717,6 +721,9 @@ export default function Landing() {
               alignItems: "center",
             }}
           >
+            <a className="lp-util" href="/pricing">
+              Pricing
+            </a>
             <a className="lp-util" href="/privacy">
               Privacy
             </a>

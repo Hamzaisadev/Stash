@@ -16,7 +16,12 @@ CREATE TABLE IF NOT EXISTS public.rooms (
     stack_key_expires_at BIGINT DEFAULT NULL,
     accept_only BOOLEAN DEFAULT FALSE,
     creator_socket_id TEXT DEFAULT 'system',
-    created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+    -- When this room should be pruned. Stamped at creation from the creator's
+    -- plan, because cleanup runs on a timer with no request to resolve a plan
+    -- from. NULL means "fall back to the default 24h after created_at"; on
+    -- plans with no room lifetime limit the room is simply never auto-pruned.
+    expires_at BIGINT DEFAULT NULL
 );
 
 -- 2. Files Table
@@ -40,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.files (
 CREATE INDEX IF NOT EXISTS idx_files_room_id ON public.files(room_id);
 CREATE INDEX IF NOT EXISTS idx_files_expires_at ON public.files(expires_at);
 CREATE INDEX IF NOT EXISTS idx_rooms_created_at ON public.rooms(created_at);
+CREATE INDEX IF NOT EXISTS idx_rooms_expires_at ON public.rooms(expires_at);
 CREATE INDEX IF NOT EXISTS idx_rooms_creator_socket_id ON public.rooms(creator_socket_id);
 
 -- 4. Atomic download slot claim.

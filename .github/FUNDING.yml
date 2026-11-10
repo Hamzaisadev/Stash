@@ -1,0 +1,14 @@
+# Funding Stash.
+#
+# Stash is MIT licensed and self-hosting is a fully supported path, so none of
+# this buys access to the code. It pays for the hosted instance: storage,
+# bandwidth, the TURN relay, and the time to keep it running.
+#
+# Uncomment and fill in whichever of these you actually have. A funding link
+# pointing at an account that does not exist is worse than no funding link.
+
+github: [Hamzaisadev]
+# ko_fi:
+# buy_me_a_coffee:
+# polar:
+# custom: ["https://stash-ed.vercel.app/pricing"]
