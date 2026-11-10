@@ -8,11 +8,13 @@ import {
   MonitorPlay,
   Plus,
   KeyRound,
+  QrCode,
   Settings2,
   Trash2,
   LogOut,
   X,
 } from "lucide-react";
+import QrCanvas from "./QrCode.jsx";
 
 /**
  * The room shell.
@@ -50,6 +52,11 @@ export default function RoomShell({
 }) {
   const [panel, setPanel] = useState(null); // 'rooms' | 'settings' | 'join' | 'create'
   const [copied, setCopied] = useState(false);
+  // Pairing a second device is the one moment where a link is the wrong
+  // affordance: you cannot paste a URL into a phone you are holding. The
+  // shell rebuild kept per-file QR but dropped the room QR, which left
+  // phone-to-laptop pairing with no path short of typing the URL by hand.
+  const [showQr, setShowQr] = useState(false);
   const shellRef = useRef(null);
 
   const link =
@@ -147,6 +154,16 @@ export default function RoomShell({
               {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
               {copied ? "Copied" : "Copy"}
             </button>
+            <button
+              type="button"
+              className="rs__copy rs__copy--qr"
+              onClick={() => setShowQr((v) => !v)}
+              aria-expanded={showQr}
+              aria-label={showQr ? "Hide room QR code" : "Show room QR code"}
+            >
+              <QrCode aria-hidden="true" />
+              QR
+            </button>
           </>
         ) : (
           <span className="rs__share-link rs__share-link--empty">
@@ -154,6 +171,22 @@ export default function RoomShell({
           </span>
         )}
       </div>
+
+      {/* Rendered locally on a canvas, not fetched from an image API: the
+          room URL is the credential for an unlisted room, and handing it to
+          a third-party QR service would leak every room anyone ever shared. */}
+      {showQr && link && (
+        <div className="rs__qr">
+          <QrCanvas
+            value={link}
+            size={200}
+            alt={`QR code linking to the room ${room.name || room.id}`}
+          />
+          <p className="rs__qr-hint">
+            Point a phone camera at this to open the room.
+          </p>
+        </div>
+      )}
 
       {/* ── panels: inline, push content, no scrim ───────────── */}
       {panel === "rooms" && (

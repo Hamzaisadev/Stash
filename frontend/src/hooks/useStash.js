@@ -107,6 +107,29 @@ const saveHostToken = (roomId, hostToken) => {
 
 const getHostToken = (roomId) => (roomId ? readHostTokens()[roomId] : undefined);
 
+/**
+ * Forget everything this browser holds about a room.
+ *
+ * Rooms are pruned server-side 24h after creation, but nothing told the client
+ * that, so a dead room sat in the sidebar forever: clicking it 404'd, its stale
+ * access and host tokens were still sent on every request, and the only way out
+ * was clearing site data. Called whenever the server says a room is gone.
+ */
+const forgetRoomLocally = (roomId) => {
+  if (!roomId) return;
+  try {
+    const tokens = readTokens();
+    delete tokens[roomId];
+    localStorage.setItem("stash_room_tokens", JSON.stringify(tokens));
+
+    const hostTokens = readHostTokens();
+    delete hostTokens[roomId];
+    localStorage.setItem("stash_host_tokens", JSON.stringify(hostTokens));
+  } catch {
+    // Storage blocked or full. The in-memory lists are still cleaned below.
+  }
+};
+
 const getAuthHeaders = (roomId = null, isJson = false) => {
   // x-host-id is still sent, but only as a room-ownership *grouping* key for
   // the per-creator room cap. It is no longer accepted as proof of host rights.
@@ -367,6 +390,22 @@ export function useStash(routeRoomId = null) {
         new CustomEvent("stash-join-denied", { detail: { roomId } }),
       );
       fireNotification("Access Denied", `Your request to join was denied.`);
+    });
+
+    // The server emits this when a host deletes a room, but nothing was
+    // listening, so everyone else kept a room that no longer existed on screen
+    // until they reloaded and hit a 404.
+    socket.on("room-deleted", ({ roomId }) => {
+      forgetRoomLocally(roomId);
+      setMyRooms((prev) => prev.filter((r) => r.id !== roomId));
+      setJoinedRooms((prev) => prev.filter((r) => r.id !== roomId));
+
+      if (roomRef.current.id === roomId) {
+        fireNotification("Room deleted", "The host deleted this room.");
+        window.dispatchEvent(
+          new CustomEvent("stash-room-deleted", { detail: { roomId } }),
+        );
+      }
     });
 
     socket.on("room-kicked", ({ roomId }) => {
@@ -638,6 +677,22 @@ export function useStash(routeRoomId = null) {
         headers: getAuthHeaders(roomId),
       });
       const json = await res.json();
+
+      // The room is gone server-side (pruned after 24h, or deleted by its
+      // host). Drop it from the sidebar and bin its tokens, rather than
+      // leaving a dead entry that fails every time it is clicked.
+      if (res.status === 404) {
+        forgetRoomLocally(roomId);
+        setMyRooms((prev) => prev.filter((r) => r.id !== roomId));
+        setJoinedRooms((prev) => prev.filter((r) => r.id !== roomId));
+        setStatus((prev) => ({
+          ...prev,
+          error:
+            "That room has expired. Rooms are deleted 24 hours after they are created.",
+        }));
+        return { expired: true, room_id: roomId };
+      }
+
       if (res.status === 403) {
         setGate({
           require_password: json.require_password,

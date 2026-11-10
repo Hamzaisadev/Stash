@@ -248,6 +248,44 @@
   translate: 0 1px;
 }
 
+/* Secondary to Copy: the link is the common path, QR is the phone path. */
+.rs__copy--qr {
+  background: #fff;
+  color: var(--rs-ink);
+}
+@media (hover: hover) {
+  .rs__copy--qr:hover {
+    background: var(--rs-paper, #f6f3ec);
+  }
+}
+
+/* --- room QR ----------------------------------------------------------- */
+.rs__qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem var(--rs-pad) 1.25rem;
+  border-bottom: 2px solid var(--rs-line);
+  background: #fff;
+}
+.rs__qr canvas,
+.rs__qr img {
+  /* A QR has to survive being photographed from an angle, so it keeps a
+     quiet zone and never scales below a scannable size. */
+  border: 2px solid var(--rs-ink);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+}
+.rs__qr-hint {
+  font-family: var(--rs-mono);
+  font-size: 0.75rem;
+  color: var(--rs-muted);
+  margin: 0;
+  text-align: center;
+}
+
 /* --- inline panel ------------------------------------------------------ */
 .rs__panel {
   border-bottom: 2px solid var(--rs-ink);
