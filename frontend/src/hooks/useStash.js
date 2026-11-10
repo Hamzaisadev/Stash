@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { io } from "socket.io-client";
 import { toast } from "sonner";
 import { notifyUploadsChanged } from "./useMyUploads.js";
+import { licenseHeaders } from "../lib/license.js";
 
 const serverIP = window.location.hostname;
 
@@ -109,7 +110,9 @@ const getHostToken = (roomId) => (roomId ? readHostTokens()[roomId] : undefined)
 const getAuthHeaders = (roomId = null, isJson = false) => {
   // x-host-id is still sent, but only as a room-ownership *grouping* key for
   // the per-creator room cap. It is no longer accepted as proof of host rights.
-  const headers = { "x-host-id": generateClientId() };
+  // The license key rides along on every call so the server can resolve the
+  // caller's plan; on the free plan licenseHeaders() is empty.
+  const headers = { "x-host-id": generateClientId(), ...licenseHeaders() };
   if (isJson) {
     headers["Content-Type"] = "application/json";
   }

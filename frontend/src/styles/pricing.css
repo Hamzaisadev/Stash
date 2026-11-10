@@ -1,0 +1,445 @@
+/* ==========================================================================
+   PRICING — same desk, same paper as the landing page.
+
+   Inherits the palette and type scale from .lp (landing.css), so this file
+   only adds what pricing needs. Everything is scoped under .pr so it cannot
+   reach the app UI.
+   ========================================================================== */
+
+.pr {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: clamp(3rem, 8vw, 6rem);
+}
+
+/* --- nav --------------------------------------------------------------- */
+.pr-nav {
+  padding-block: clamp(1.25rem, 3vw, 2rem);
+  align-items: center;
+}
+
+.pr-wordmark {
+  grid-column: 1 / span 4;
+  font-weight: 800;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.pr-nav-links {
+  grid-column: 5 / span 8;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2.25rem);
+  flex-wrap: wrap;
+}
+
+/* --- hero -------------------------------------------------------------- */
+.pr-hero {
+  padding-block: clamp(2rem, 7vw, 5rem) clamp(2rem, 5vw, 3.5rem);
+  row-gap: 1.25rem;
+}
+
+.pr-eyebrow {
+  grid-column: 1 / span 12;
+  font-family: var(--f-mono);
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.pr-title {
+  grid-column: 1 / span 12;
+  font-size: var(--t-xl);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  margin: 0;
+}
+
+.pr-sub {
+  grid-column: 1 / span 12;
+  max-width: 54ch;
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .pr-sub {
+    grid-column: 1 / span 7;
+  }
+}
+
+/* --- plan cards -------------------------------------------------------- */
+.pr-plans {
+  row-gap: 1.25rem;
+  padding-block: clamp(1rem, 3vw, 2rem);
+  align-items: stretch;
+}
+
+.pr-card {
+  grid-column: 1 / span 12;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: #fff;
+}
+
+@media (min-width: 900px) {
+  .pr-card {
+    grid-column: span 4;
+  }
+}
+
+/* The lead plan is marked by weight and a lift, not by colour alone. */
+.pr-card-lead {
+  border-color: var(--ink);
+  box-shadow: 0 18px 40px -28px rgba(20, 22, 26, 0.55);
+}
+
+.pr-badge {
+  position: absolute;
+  top: -0.7rem;
+  left: clamp(1.5rem, 3vw, 2.25rem);
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+}
+
+.pr-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.pr-plan-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.pr-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.pr-price-figure {
+  font-size: clamp(2.5rem, 1.6rem + 3vw, 3.75rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.pr-price-cadence {
+  font-family: var(--f-mono);
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+
+.pr-tagline {
+  font-size: var(--t-s);
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* --- buttons ----------------------------------------------------------- */
+.pr-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.85rem 1.4rem;
+  border-radius: var(--r);
+  font-size: var(--t-s);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--ink);
+  transition:
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.pr-cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.pr-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pr-cta-solid {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.pr-cta-solid:hover:not(:disabled) {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.pr-cta-outline {
+  background: transparent;
+  color: var(--ink);
+}
+
+.pr-cta-outline:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.pr-ghost {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-xs);
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.pr-ghost:hover {
+  color: var(--ink);
+}
+
+/* --- feature lists ----------------------------------------------------- */
+.pr-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.pr-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: var(--t-s);
+  line-height: 1.5;
+}
+
+.pr-tick {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 0.22rem;
+  color: var(--blue);
+}
+
+.pr-feature-missing {
+  color: var(--muted);
+}
+
+.pr-feature-missing .pr-tick {
+  color: var(--muted);
+}
+
+/* --- generic section --------------------------------------------------- */
+.pr-section {
+  padding-block: clamp(2.5rem, 6vw, 4.5rem);
+  row-gap: 1.5rem;
+  border-top: 1px solid var(--line);
+  margin-top: clamp(2rem, 5vw, 3.5rem);
+}
+
+.pr-h2 {
+  grid-column: 1 / span 12;
+  font-size: var(--t-l);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .pr-h2 {
+    grid-column: 1 / span 4;
+  }
+}
+
+.pr-honesty {
+  grid-column: 1 / span 12;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 68ch;
+}
+
+@media (min-width: 900px) {
+  .pr-honesty {
+    grid-column: 6 / span 7;
+  }
+}
+
+.pr-honesty li {
+  font-size: var(--t-body);
+  line-height: 1.65;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--line);
+}
+
+/* --- licence panel ----------------------------------------------------- */
+.pr-license {
+  grid-column: 1 / span 12;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: #fff;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 44rem;
+}
+
+.pr-license-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.pr-license-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pr-label {
+  font-family: var(--f-mono);
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.pr-license-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.pr-input {
+  flex: 1 1 18rem;
+  min-width: 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-family: var(--f-mono);
+  font-size: var(--t-s);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.pr-input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+  border-color: var(--blue);
+}
+
+.pr-license-help,
+.pr-msg {
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  margin: 0;
+  color: var(--muted);
+}
+
+.pr-msg-error {
+  color: #b32d10; /* 5.2:1 on white */
+}
+
+.pr-msg-ok {
+  color: #1d6a3a;
+}
+
+.pr-license-active {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--t-s);
+  margin: 0;
+}
+
+/* --- faq --------------------------------------------------------------- */
+.pr-faq {
+  grid-column: 1 / span 12;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 68ch;
+}
+
+@media (min-width: 900px) {
+  .pr-faq {
+    grid-column: 6 / span 7;
+  }
+}
+
+.pr-faq-item dt {
+  font-weight: 650;
+  font-size: var(--t-body);
+  margin-bottom: 0.35rem;
+}
+
+.pr-faq-item dd {
+  margin: 0;
+  font-size: var(--t-s);
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+/* --- footer ------------------------------------------------------------ */
+.pr-foot {
+  margin-top: auto;
+  padding-top: clamp(2rem, 5vw, 3rem);
+  border-top: 1px solid var(--line);
+}
+
+.pr-foot-links {
+  grid-column: 1 / span 12;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+/* Motion is decoration here; the reveal is driven by GSAP on the landing
+   page only, so pricing content must never depend on it to be visible. */
+@media (prefers-reduced-motion: reduce) {
+  .pr-cta {
+    transition: none;
+  }
+  .pr-cta:hover:not(:disabled) {
+    transform: none;
+  }
+}

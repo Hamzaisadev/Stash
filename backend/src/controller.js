@@ -5,6 +5,8 @@ import { supabase } from './supabase.js';
 import { AppError } from './utils/errors.js';
 import { generateRoomToken, verifyRoomToken, generateHostToken, isVerifiedHost } from './utils/auth.js';
 import { roomHosts, roomClipboards } from './state.js';
+import { checkQuota, recordUsage } from './billing/entitlements.js';
+import { formatBytes } from './upload.js';
 import { ZipArchive } from 'archiver';
 
 // Helper: Sanitize filenames to prevent directory traversal or header injection (S13)
@@ -52,7 +54,12 @@ const hashIp = (ip) => {
     return crypto.createHash("sha256").update(cleanIp).digest('hex').substring(0, 12);
 };
 
-// Helper: Clean up expired rooms and orphaned files
+// Helper: Clean up expired rooms and orphaned files.
+//
+// Rooms carry their own `expires_at` because this runs on a timer with no
+// request attached, so the creator's plan cannot be re-resolved here. Paid
+// plans stamp a later expiry at creation time; rows predating that column have
+// a NULL expiry and fall back to the original 24h rule.
 export const cleanupExpiredRooms = async () => {
     const now = Date.now();
     const ONE_DAY = 24 * 60 * 60 * 1000;
@@ -61,8 +68,8 @@ export const cleanupExpiredRooms = async () => {
         const { data: expiredRooms } = await supabase
             .from('rooms')
             .select('id')
-            .lt('created_at', threshold)
-            .neq('creator_socket_id', 'system');
+            .neq('creator_socket_id', 'system')
+            .or(`and(expires_at.is.null,created_at.lt.${threshold}),and(expires_at.not.is.null,expires_at.lt.${now})`);
 
         if (expiredRooms && expiredRooms.length > 0) {
             const roomIds = expiredRooms.map(r => r.id);
@@ -159,10 +166,25 @@ export const uploadFile = async (req, res, next) => {
             return next(new AppError('You are not authorized to upload files to this room.', 401));
         }
 
-        // Clamp expires_in between 1 minute and 7 days (10080 min) (F6)
+        // Daily volume quota. Checked before any storage write so an over-quota
+        // upload costs no bandwidth, and committed only after the write lands.
+        const incomingFiles = req.files || (req.file ? [req.file] : []);
+        const incomingBytes = incomingFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+        const quota = checkQuota(req, incomingBytes);
+        if (!quota.allowed) {
+            return next(new AppError(
+                `That upload would exceed your daily allowance of ${formatBytes(quota.limit)}. ` +
+                `You have ${formatBytes(quota.remaining)} left today.`,
+                402
+            ));
+        }
+
+        // Clamp expires_in. The ceiling is the caller's plan limit (7 days on
+        // free, longer on paid); the 24h default is unchanged for everyone.
+        const planMaxMinutes = req.entitlement?.limits?.maxExpiryMinutes ?? 10080;
         let parsedMinutes = parseInt(expires_in, 10);
         if (isNaN(parsedMinutes) || parsedMinutes < 1) parsedMinutes = 1440;
-        if (parsedMinutes > 10080) parsedMinutes = 10080;
+        if (planMaxMinutes !== null && parsedMinutes > planMaxMinutes) parsedMinutes = planMaxMinutes;
         const expires_at = Date.now() + (parsedMinutes * 60 * 1000);
 
         // Validate max_downloads (positive integer or null) (F6)
@@ -255,6 +277,10 @@ export const uploadFile = async (req, res, next) => {
             await supabase.storage.from('stash-files').remove([storagePath]);
             return next(dbError);
         }
+
+        // Commit quota only now: a failed storage or metadata write must not
+        // consume someone's daily allowance.
+        recordUsage(req, finalSize);
 
         const fileMetadata = {
             id: fileId,
@@ -570,19 +596,35 @@ export const createRoom = async (req, res, next) => {
         const cleanId = String(id).trim().toLowerCase().slice(0, 64);
         const cleanName = String(name).trim().slice(0, 100);
 
-        if (host_id && host_id !== 'system') {
+        // Room cap comes from the caller's plan (10 on free, more on paid,
+        // unlimited on Team and self-hosted).
+        const maxRooms = req.entitlement?.limits?.maxRoomsPerHost ?? 10;
+        if (host_id && host_id !== 'system' && maxRooms !== null) {
             const { data: userRooms, error: countError } = await supabase
                 .from('rooms')
                 .select('id')
                 .eq('creator_socket_id', host_id);
 
             if (countError) throw countError;
-            if (userRooms && userRooms.length >= 10) {
-                return next(new AppError('You have reached the maximum limit of 10 created rooms.', 400));
+            if (userRooms && userRooms.length >= maxRooms) {
+                return next(new AppError(
+                    `You have reached the maximum of ${maxRooms} rooms on the ` +
+                    `${req.entitlement?.plan?.name || 'Free'} plan.`,
+                    400
+                ));
             }
         }
 
         const created_at = Date.now();
+
+        // Stamp the room's own expiry from the plan, since the timer-based
+        // cleanup has no request context to resolve a plan from later.
+        // null lifetime (Team, self-hosted) means the room is never auto-pruned.
+        const lifetimeHours = req.entitlement?.limits?.maxRoomLifetimeHours ?? 24;
+        const room_expires_at = lifetimeHours === null
+            ? null
+            : created_at + lifetimeHours * 60 * 60 * 1000;
+
         let stack_key_plain = null;
         let stack_key_hash = null;
         let stack_key_expires_at = null;
@@ -605,7 +647,8 @@ export const createRoom = async (req, res, next) => {
                 stack_key_expires_at,
                 accept_only: accept_only_val,
                 creator_socket_id: host_id || 'system',
-                created_at
+                created_at,
+                expires_at: room_expires_at
             }])
             .select()
             .single();

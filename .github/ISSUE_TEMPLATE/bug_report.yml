@@ -1,0 +1,75 @@
+name: Bug report
+description: Something behaves differently than it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **Do not paste a file you actually care about, a room code, or a license
+        key.** Rooms are shared by whoever holds the code, and a license key is a
+        bearer credential — anyone who reads it can use it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        1. Opened a room on my phone and my laptop
+        2. Dropped a 40 MB video on the laptop
+        3. Expected it to appear on the phone; it stayed at 0%
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did this happen?
+      options:
+        - The hosted app (stash-ed.vercel.app)
+        - My own self-hosted instance
+        - Local development
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - File upload or download
+        - Screen or camera casting
+        - Synced clipboard
+        - Voice memos
+        - Rooms, codes or access
+        - Billing, plans or license keys
+        - Landing or pricing page
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      placeholder: Safari 18 on iPhone 14, iOS 18.2
+    validations:
+      required: true
+
+  - type: input
+    id: network
+    attributes:
+      label: Network
+      description: >
+        Worth asking, because peer-to-peer transfer and screen share need a TURN
+        relay to work across most mobile and corporate networks.
+      placeholder: Phone on 5G, laptop on home wifi
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Anything red in the browser console, and the server log if you self-host.
+      render: shell
