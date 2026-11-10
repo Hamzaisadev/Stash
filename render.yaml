@@ -1,0 +1,61 @@
+# Render blueprint for the Stash backend.
+#
+# This repo is a monorepo and the deployable service is `backend/`, not the
+# root. Without `rootDir` Render builds the root package.json, whose `start`
+# just delegates, and whose dependencies do not include the server's.
+#
+# The frontend is NOT deployed here. It is static and belongs on Vercel; the
+# backend needs a persistent process for WebSockets, which is why it is split
+# out in the first place.
+
+services:
+  - type: web
+    name: stash-backend
+    runtime: node
+    rootDir: backend
+    plan: starter # Free instances sleep, which drops every socket and clears
+                  # in-process room, clipboard and quota state on wake.
+    buildCommand: npm ci
+    startCommand: npm start
+
+    # server.js listens on PORT and responds to /api/billing/plans without
+    # touching the database, which makes it a safe liveness probe.
+    healthCheckPath: /api/billing/plans
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Generated once by Render and then held. Rotating it invalidates every
+      # outstanding room and host token.
+      - key: TOKEN_SECRET
+        generateValue: true
+
+      # Signs license keys. Kept separate from TOKEN_SECRET because a leak of
+      # the room-token secret must not also mint paid licenses.
+      - key: LICENSE_SECRET
+        generateValue: true
+
+      # Set these in the Render dashboard — they are credentials, so they are
+      # deliberately not committed here.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+
+      # Comma-separated frontend origins. Browser requests from anywhere else
+      # are rejected, so an empty value here means the app cannot talk to this
+      # API at all.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+      # Billing is optional. Leave these unset and every request is served on
+      # the Free plan; the pricing page reports checkout as unconfigured.
+      - key: CHECKOUT_URL_PRO
+        sync: false
+      - key: CHECKOUT_URL_TEAM
+        sync: false
+      - key: BILLING_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false

@@ -95,10 +95,13 @@ export const cleanupExpiredFiles = async () => {
     try {
         await cleanupExpiredRooms();
 
+        // `now` was previously referenced here without being declared, so every
+        // run threw a ReferenceError that the catch below swallowed: expired
+        // files were never actually removed from storage or the table.
         const { data: expiredFiles, error } = await supabase
             .from('files')
             .select('id, file_path')
-            .lt('expires_at', now);
+            .lt('expires_at', Date.now());
 
         if (error) throw error;
 
