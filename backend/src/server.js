@@ -5,6 +5,8 @@ import helmet from "helmet";
 import { globalLimiter } from "./utils/limiter.js";
 import { Server } from "socket.io";
 import filesRoutes from './routes.js';
+import billingRoutes from './billing/routes.js';
+import { pruneUsage } from './billing/entitlements.js';
 import { globalErrorHandler } from "./utils/errors.js";
 import { generateRoomToken, verifyRoomToken, verifyHostToken } from "./utils/auth.js";
 import { supabase } from "./supabase.js";
@@ -61,6 +63,13 @@ app.use(cors({
     credentials: true,
     exposedHeaders: ['Content-Disposition']
 }));
+
+// The billing webhook signature is computed over the exact bytes the provider
+// sent, so this route must see the raw body. It is mounted before
+// express.json() because the JSON parser would otherwise consume the stream and
+// leave only a re-serialised object, whose key order and whitespace would not
+// reproduce the provider's signature.
+app.use('/api/billing/webhook', express.raw({ type: '*/*', limit: '1mb' }));
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -251,6 +260,7 @@ io.on("connection", (socket) => {
 });
 
 // Mount API routes
+app.use('/api/billing', billingRoutes);
 app.use('/api', filesRoutes);
 
 // Global error handling middleware
@@ -266,6 +276,7 @@ const runCleanup = async () => {
     cleanupRunning = true;
     try {
         await cleanupExpiredFiles();
+        pruneUsage(); // drop expired quota buckets so the map stays bounded
     } catch (err) {
         console.error('Scheduled cleanup failed:', err);
     } finally {

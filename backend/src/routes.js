@@ -1,6 +1,7 @@
 import express from 'express';
-import upload from './upload.js';
+import upload, { enforceUploadLimits } from './upload.js';
 import { checkRoomAccess } from './utils/auth.js';
+import { attachEntitlement } from './billing/entitlements.js';
 import { authLimiter } from './utils/limiter.js';
 import {
     uploadFile,
@@ -19,6 +20,10 @@ import {
 
 const router = express.Router();
 
+// Every route below may consult the caller's plan, so the entitlement is
+// resolved once here rather than re-derived in each controller.
+router.use(attachEntitlement);
+
 // Room Management
 router.post('/rooms', authLimiter, createRoom);
 router.get('/rooms/:room_id', getRoomDetails);
@@ -31,8 +36,10 @@ router.delete('/rooms/:room_id', deleteRoom);
 router.get('/room', getRoom);
 router.get('/files/:room_id', checkRoomAccess, getFiles);
 
-// Uploads
-router.post('/upload', upload.array('files', 10), uploadFile);
+// Uploads. Multer applies only the hard process-safety ceiling; the caller's
+// actual plan limits are applied by enforceUploadLimits once the parts are
+// parsed and req.entitlement is known.
+router.post('/upload', upload.array('files'), enforceUploadLimits, uploadFile);
 
 // File specific actions
 router.get('/preview/:id', getPreview);

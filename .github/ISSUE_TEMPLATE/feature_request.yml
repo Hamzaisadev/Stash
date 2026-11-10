@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest something Stash should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stash's stated strategy is to be genuinely good at one thing — moving a
+        file between two devices with no account — rather than to grow a feature
+        list. See [the roadmap](../../blob/main/docs/ROADMAP.md) before filing;
+        the most useful requests are ones that remove a reason the handoff fails.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: Describe the situation, not the solution you have in mind.
+      placeholder: >
+        I send design mockups to a client who is not technical. They keep
+        downloading the file twice and asking which one is current.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+      description: Including other tools. Knowing what you switched from is useful.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I have read the roadmap and this is not already planned.
+        - label: I would be willing to help implement this.
