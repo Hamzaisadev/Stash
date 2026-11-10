@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/Hamzaisadev/Stash/security/advisories/new
+    about: >
+      Report privately, never as a public issue. See SECURITY.md.
+  - name: Report abuse on the hosted instance
+    url: mailto:abuse@stash.example
+    about: Illegal or abusive content on stash-ed.vercel.app.
+  - name: Billing, refunds and license keys
+    url: mailto:hamzaisadev@gmail.com
+    about: >
+      Anything involving a payment. Never post a license key in a public issue —
+      it is a bearer credential.
