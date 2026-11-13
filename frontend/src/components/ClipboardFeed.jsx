@@ -72,9 +72,13 @@ export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard
         </div>
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          {/* Keyed on the server's timestamp, not the array index. Clips are
+              appended then reversed for display, so every index shifts when a
+              new one arrives — which made React reuse rows and left the copied
+              checkmark on whichever clip happened to inherit the index. */}
           {clipboard.slice().reverse().map((item, i) => (
             <div
-              key={i}
+              key={item.time ?? i}
               className={`flex items-start justify-between text-xs p-3 rounded-xl border transition-all ${
                 item.fromRemote 
                   ? 'bg-red-50 border-red-100 text-red-700' 
@@ -85,11 +89,11 @@ export default function ClipboardFeed({ clipboard, sendClipboard, clearClipboard
                 {item.text}
               </span>
               <button
-                onClick={() => handleCopyText(item.text, i)}
+                onClick={() => handleCopyText(item.text, item.time ?? i)}
                 className="ml-3 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-700 transition-colors flex-shrink-0 cursor-pointer"
                 title="Copy clip"
               >
-                {copiedId === i ? (
+                {copiedId === (item.time ?? i) ? (
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
                 ) : (
                   <Copy className="w-3.5 h-3.5" />

@@ -482,7 +482,7 @@ function AppPage() {
           {activeMode === "files" && (
             <>
               <UploadForm
-                onUpload={uploadFile}
+                uploadFile={uploadFile}
                 isUploading={status.isUploading}
                 uploadProgress={uploadProgress}
               />
@@ -509,8 +509,9 @@ function AppPage() {
           {activeMode === "clipboard" && (
             <ClipboardFeed
               clipboard={clipboard}
-              onSend={sendClipboard}
-              onClear={clearClipboard}
+              sendClipboard={sendClipboard}
+              clearClipboard={clearClipboard}
+              isRoomHost={isRoomHost}
             />
           )}
 
