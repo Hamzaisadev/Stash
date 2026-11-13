@@ -26,6 +26,16 @@ services:
       - key: NODE_ENV
         value: production
 
+      # Uploads are buffered in RAM, so the per-file ceiling is bounded by the
+      # instance, not by the plan. Starter has 512 MB; 96 MB leaves room for the
+      # zip buffer (multi-file uploads hold the parts and the archive at once)
+      # and a second concurrent upload. Without this the server accepts a body
+      # far larger than it can hold and is OOM-killed mid-transfer, which the
+      # browser reports as a network error rather than a limit.
+      # Raise this in step with the instance size.
+      - key: UPLOAD_MEMORY_CEILING_MB
+        value: "96"
+
       # Generated once by Render and then held. Rotating it invalidates every
       # outstanding room and host token.
       - key: TOKEN_SECRET

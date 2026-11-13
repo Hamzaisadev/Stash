@@ -1,5 +1,5 @@
 import express from 'express';
-import upload, { enforceUploadLimits } from './upload.js';
+import { handleUpload, enforceUploadLimits } from './upload.js';
 import { checkRoomAccess } from './utils/auth.js';
 import { attachEntitlement } from './billing/entitlements.js';
 import { authLimiter } from './utils/limiter.js';
@@ -36,10 +36,11 @@ router.delete('/rooms/:room_id', deleteRoom);
 router.get('/room', getRoom);
 router.get('/files/:room_id', checkRoomAccess, getFiles);
 
-// Uploads. Multer applies only the hard process-safety ceiling; the caller's
-// actual plan limits are applied by enforceUploadLimits once the parts are
-// parsed and req.entitlement is known.
-router.post('/upload', upload.array('files'), enforceUploadLimits, uploadFile);
+// Uploads. handleUpload applies only the hard process-safety ceiling and turns
+// multer's own rejections into real 4xx responses; the caller's actual plan
+// limits are applied by enforceUploadLimits once the parts are parsed and
+// req.entitlement is known.
+router.post('/upload', handleUpload, enforceUploadLimits, uploadFile);
 
 // File specific actions
 router.get('/preview/:id', getPreview);
